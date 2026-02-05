@@ -1,15 +1,23 @@
 import type Database from "better-sqlite3";
+import sceneSchema from "../../../../../packages/shared/schemas/scene_extract.schema.json";
 import type { ChunkRecord } from "../storage/chunkRepo";
 import type { SceneSummary } from "../storage/sceneRepo";
+import { normalizeAlias } from "../../../../../packages/shared/utils/normalize";
+import { findExactSpan, findFuzzySpan } from "../../../../../packages/shared/utils/spans";
+import { buildSceneMetaUserPrompt, SCENE_META_SYSTEM_PROMPT } from "../llm/promptPack";
+import { CloudProvider, NullProvider, type LLMProvider } from "../llm/provider";
+import { completeJsonWithRetry } from "../llm/validator";
+import { loadProjectConfig } from "../config";
 import {
+  deleteSceneEvidenceForScene,
   insertSceneEvidence,
   listAliases,
   listChunksForDocument,
   listEntities,
   listScenesForProject,
+  logEvent,
   replaceSceneEntities,
-  updateSceneMetadata,
-  deleteSceneEvidenceForScene
+  updateSceneMetadata
 } from "../storage";
 
 const FIRST_PERSON = /\b(I|me|my|mine|we|our|us)\b/;
@@ -111,13 +119,59 @@ function sceneChunksFor(scene: SceneSummary, chunks: ChunkRecord[]): ChunkRecord
   return chunks.filter((chunk) => chunk.ordinal >= startOrdinal && chunk.ordinal <= endOrdinal);
 }
 
-export function runSceneMetadata(db: Database.Database, projectId: string, documentId: string): void {
+type SceneMetaOutput = {
+  schemaVersion: string;
+  povMode: "first" | "third_limited" | "omniscient" | "epistolary" | "unknown";
+  povName: string | null;
+  povConfidence: number;
+  settingName: string | null;
+  settingText: string | null;
+  settingConfidence: number;
+  timeContextText: string | null;
+  evidence: Array<{ chunkOrdinal: number; quote: string }>;
+};
+
+function buildProvider(rootPath: string): LLMProvider {
+  const config = loadProjectConfig(rootPath);
+  if (!config.llm.enabled || config.llm.provider === "null") {
+    return new NullProvider();
+  }
+  const apiKey = process.env.CANONKEEPER_LLM_API_KEY ?? "";
+  const baseUrl = config.llm.baseUrl ?? process.env.CANONKEEPER_LLM_BASE_URL ?? "";
+  return new CloudProvider(baseUrl, apiKey);
+}
+
+function buildAliasMap(
+  entities: Array<{ id: string; display_name: string }>,
+  aliasLookup: (id: string) => string[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const entity of entities) {
+    const aliases = [entity.display_name, ...aliasLookup(entity.id)];
+    for (const alias of aliases) {
+      map.set(normalizeAlias(alias), entity.id);
+    }
+  }
+  return map;
+}
+
+export async function runSceneMetadata(
+  db: Database.Database,
+  projectId: string,
+  documentId: string,
+  rootPath: string
+): Promise<void> {
   const scenes = listScenesForProject(db, projectId).filter((scene) => scene.document_id === documentId);
   const chunks = listChunksForDocument(db, documentId);
 
   const entities = listEntities(db, projectId);
   const characterEntities = entities.filter((entity) => entity.type === "character");
   const locationEntities = entities.filter((entity) => entity.type === "location");
+  const characterMap = buildAliasMap(characterEntities, (id) => listAliases(db, id));
+  const locationMap = buildAliasMap(locationEntities, (id) => listAliases(db, id));
+
+  const provider = buildProvider(rootPath);
+  const providerAvailable = await provider.isAvailable();
 
   for (const scene of scenes) {
     const scopedChunks = sceneChunksFor(scene, chunks);
@@ -170,6 +224,23 @@ export function runSceneMetadata(db: Database.Database, projectId: string, docum
       }
     }
 
+    const sceneEntities: Array<{ entityId: string; role: "mentioned" | "setting" | "present"; confidence: number }> = [];
+    const sceneEntityIds = new Set<string>();
+    for (const character of characterEntities) {
+      const aliases = [character.display_name, ...listAliases(db, character.id)];
+      for (const alias of aliases) {
+        if (findAliasEvidence(scopedChunks, alias)) {
+          sceneEntityIds.add(character.id);
+          sceneEntities.push({ entityId: character.id, role: "mentioned", confidence: 0.5 });
+          break;
+        }
+      }
+    }
+
+    if (settingEntityId && !sceneEntityIds.has(settingEntityId)) {
+      sceneEntities.push({ entityId: settingEntityId, role: "setting", confidence: 0.7 });
+    }
+
     updateSceneMetadata(db, scene.id, {
       pov_mode: povMode,
       pov_entity_id: povEntityId,
@@ -189,23 +260,127 @@ export function runSceneMetadata(db: Database.Database, projectId: string, docum
       });
     }
 
-    const sceneEntities: Array<{ entityId: string; role: "mentioned" | "setting"; confidence: number }> = [];
-    const sceneEntityIds = new Set<string>();
-    for (const character of characterEntities) {
-      const aliases = [character.display_name, ...listAliases(db, character.id)];
-      for (const alias of aliases) {
-        if (findAliasEvidence(scopedChunks, alias)) {
-          sceneEntityIds.add(character.id);
-          sceneEntities.push({ entityId: character.id, role: "mentioned", confidence: 0.5 });
-          break;
-        }
-      }
-    }
-
-    if (settingEntityId && !sceneEntityIds.has(settingEntityId)) {
-      sceneEntities.push({ entityId: settingEntityId, role: "setting", confidence: 0.7 });
-    }
-
     replaceSceneEntities(db, scene.id, sceneEntities);
+
+    if (!providerAvailable) {
+      continue;
+    }
+
+    if (scopedChunks.length === 0) {
+      continue;
+    }
+
+    logEvent(db, {
+      projectId,
+      level: "info",
+      eventType: "llm_call",
+      payload: { type: "scene_meta", sceneId: scene.id }
+    });
+
+    const sceneChunkPayload = scopedChunks.map((chunk, index) => ({
+      index,
+      chunk
+    }));
+
+    const prompt = buildSceneMetaUserPrompt({
+      knownCharacters: characterEntities.map((entity) => ({
+        displayName: entity.display_name,
+        aliases: listAliases(db, entity.id)
+      })),
+      knownLocations: locationEntities.map((entity) => ({
+        displayName: entity.display_name,
+        aliases: listAliases(db, entity.id)
+      })),
+      sceneChunks: sceneChunkPayload.map((entry) => ({ ordinal: entry.index, text: entry.chunk.text }))
+    });
+
+    let completion: { json: SceneMetaOutput } | null = null;
+    try {
+      completion = await completeJsonWithRetry<SceneMetaOutput>(provider, {
+        schemaName: "scene_meta",
+        systemPrompt: SCENE_META_SYSTEM_PROMPT,
+        userPrompt: prompt,
+        jsonSchema: sceneSchema,
+        temperature: 0.1,
+        maxTokens: 800
+      });
+    } catch (error) {
+      logEvent(db, {
+        projectId,
+        level: "warn",
+        eventType: "scene_meta_failed",
+        payload: {
+          sceneId: scene.id,
+          message: error instanceof Error ? error.message : "Unknown error"
+        }
+      });
+      continue;
+    }
+
+    const mappedEvidence: Array<{ chunkId: string; quoteStart: number; quoteEnd: number }> = [];
+    for (const ev of completion.json.evidence ?? []) {
+      const chunkEntry = sceneChunkPayload[ev.chunkOrdinal];
+      if (!chunkEntry) continue;
+      const span = findExactSpan(chunkEntry.chunk.text, ev.quote) ?? findFuzzySpan(chunkEntry.chunk.text, ev.quote);
+      if (!span) continue;
+      mappedEvidence.push({
+        chunkId: chunkEntry.chunk.id,
+        quoteStart: span.start,
+        quoteEnd: span.end
+      });
+    }
+
+    if (mappedEvidence.length === 0) {
+      continue;
+    }
+
+    const povName = completion.json.povName ? normalizeAlias(completion.json.povName) : null;
+    const settingName = completion.json.settingName ? normalizeAlias(completion.json.settingName) : null;
+    const mappedPovEntityId = povName ? characterMap.get(povName) ?? null : null;
+    const mappedSettingEntityId = settingName ? locationMap.get(settingName) ?? null : null;
+
+    const nextSettingText =
+      mappedSettingEntityId ? completion.json.settingName : completion.json.settingText;
+
+    updateSceneMetadata(db, scene.id, {
+      pov_mode: completion.json.povMode,
+      pov_entity_id: mappedPovEntityId,
+      pov_confidence: completion.json.povConfidence,
+      setting_entity_id: mappedSettingEntityId,
+      setting_text: nextSettingText ?? null,
+      setting_confidence: completion.json.settingConfidence,
+      time_context_text: completion.json.timeContextText
+    });
+
+    deleteSceneEvidenceForScene(db, scene.id);
+    for (const span of mappedEvidence) {
+      insertSceneEvidence(db, {
+        sceneId: scene.id,
+        chunkId: span.chunkId,
+        quoteStart: span.quoteStart,
+        quoteEnd: span.quoteEnd
+      });
+    }
+
+    const nextSceneEntities = sceneEntities.filter(
+      (entry) =>
+        entry.entityId !== mappedSettingEntityId && entry.entityId !== mappedPovEntityId
+    );
+    if (mappedSettingEntityId) {
+      nextSceneEntities.push({
+        entityId: mappedSettingEntityId,
+        role: "setting",
+        confidence: completion.json.settingConfidence
+      });
+    }
+    if (mappedPovEntityId) {
+      nextSceneEntities.push({
+        entityId: mappedPovEntityId,
+        role: "present",
+        confidence: completion.json.povConfidence
+      });
+    }
+
+    replaceSceneEntities(db, scene.id, nextSceneEntities);
   }
 }

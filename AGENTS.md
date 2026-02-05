@@ -384,4 +384,5 @@ The point of this project is to **empower** the writer by reducing continuity bo
 - Scene metadata: deterministic POV (first-person) + setting detection now populate `scene_metadata`, `scene_entity`, and `scene_evidence`.
 - Config sync: `canonkeeper.json` document list is loaded on project open and updated on add-document.
 - Confirmed claims now copy evidence from the source inferred claim to preserve evidence-first guarantees.
+- LLM scene metadata: optional LLM classifier (schema-validated, evidence-mapped) can override deterministic scene metadata when evidence is found.
 ```
