@@ -16,13 +16,30 @@ declare global {
           state: "idle" | "busy";
           lastJob?: string;
           projectId?: string | null;
+          queueDepth?: number;
+          workerState?: "ready" | "restarting" | "down";
+          lastError?: string | null;
         }>;
+        getProcessingState: () => Promise<
+          Array<{
+            document_id: string;
+            snapshot_id: string;
+            stage: string;
+            status: string;
+            error: string | null;
+            updated_at: number;
+            document_path: string;
+          }>
+        >;
         addDocument: (payload: { path: string }) => Promise<{
           documentId: string;
           snapshotId: string;
+          snapshotCreated: boolean;
           chunksCreated: number;
           chunksUpdated: number;
           chunksDeleted: number;
+          changeStart: number | null;
+          changeEnd: number | null;
         }>;
       };
       search: {

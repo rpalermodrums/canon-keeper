@@ -5,9 +5,11 @@ export {
   getDocumentById,
   createDocument,
   touchDocument,
-  listDocuments
+  listDocuments,
+  markDocumentMissing,
+  markDocumentSeen
 } from "./documentRepo";
-export { insertSnapshot, getLatestSnapshotVersion } from "./snapshotRepo";
+export { insertSnapshot, getLatestSnapshot } from "./snapshotRepo";
 export {
   listChunksForDocument,
   deleteChunksByIds,
@@ -54,3 +56,20 @@ export {
 } from "./issueRepo";
 export { type StoragePaths, getStoragePaths, ensureStorageDirs } from "./paths";
 export { runMigrations } from "./migrations";
+export {
+  enqueueJob,
+  claimNextJob,
+  getJobById,
+  completeJob,
+  failJob,
+  getQueueDepth,
+  resetRunningJobs,
+  type JobQueueRow
+} from "./jobQueueRepo";
+export {
+  getProcessingState,
+  upsertProcessingState,
+  listProcessingStates,
+  type ProcessingStateRow,
+  type ProcessingStatus
+} from "./processingStateRepo";

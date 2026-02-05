@@ -7,12 +7,21 @@ export type SnapshotSummary = Pick<
   "id" | "document_id" | "version" | "full_text" | "full_text_hash" | "created_at"
 >;
 
-export function getLatestSnapshotVersion(db: Database.Database, documentId: string): number {
-  const row = db
-    .prepare("SELECT MAX(version) as max_version FROM document_snapshot WHERE document_id = ?")
-    .get(documentId) as { max_version: number | null } | undefined;
+export type SnapshotInsertResult = {
+  snapshot: SnapshotSummary;
+  created: boolean;
+};
 
-  return row?.max_version ?? 0;
+export function getLatestSnapshot(
+  db: Database.Database,
+  documentId: string
+): SnapshotSummary | null {
+  const row = db
+    .prepare(
+      "SELECT id, document_id, version, full_text, full_text_hash, created_at FROM document_snapshot WHERE document_id = ? ORDER BY version DESC LIMIT 1"
+    )
+    .get(documentId) as SnapshotSummary | undefined;
+  return row ?? null;
 }
 
 export function insertSnapshot(
@@ -20,8 +29,13 @@ export function insertSnapshot(
   documentId: string,
   fullText: string,
   fullTextHash: string
-): SnapshotSummary {
-  const version = getLatestSnapshotVersion(db, documentId) + 1;
+): SnapshotInsertResult {
+  const latest = getLatestSnapshot(db, documentId);
+  if (latest && latest.full_text_hash === fullTextHash) {
+    return { snapshot: latest, created: false };
+  }
+
+  const version = (latest?.version ?? 0) + 1;
   const now = Date.now();
   const snapshot: SnapshotSummary = {
     id: crypto.randomUUID(),
@@ -43,5 +57,5 @@ export function insertSnapshot(
     snapshot.created_at
   );
 
-  return snapshot;
+  return { snapshot, created: true };
 }

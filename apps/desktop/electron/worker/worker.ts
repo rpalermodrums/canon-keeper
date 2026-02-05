@@ -9,11 +9,16 @@ import {
   openDatabase,
   dismissIssue,
   touchProject,
-  logEvent
+  logEvent,
+  getQueueDepth,
+  listProcessingStates,
+  markDocumentMissing,
+  markDocumentSeen,
+  getDocumentByPath
 } from "./storage";
 import { ingestDocument } from "./pipeline/ingest";
-import { JobQueue } from "./jobs/queue";
-import type { IngestJob, IngestJobResult } from "./jobs/types";
+import { PersistentJobQueue } from "./jobs/persistentQueue";
+import type { WorkerJob, WorkerJobResult } from "./jobs/types";
 import chokidar, { type FSWatcher } from "chokidar";
 import fs from "node:fs";
 import { searchChunks } from "./search/fts";
@@ -25,10 +30,15 @@ import { exportProject } from "./export/exporter";
 import type { DatabaseHandle } from "./storage";
 import { getSceneDetail } from "./scenes";
 import { addDocumentToConfig, loadProjectConfig, resolveDocumentPath } from "./config";
+import { runSceneStage } from "./pipeline/stages/scenes";
+import { runStyleStage } from "./pipeline/stages/style";
+import { runExtractionStage } from "./pipeline/stages/extraction";
+import { runContinuityStage } from "./pipeline/stages/continuity";
 
 export type WorkerStatus = {
   state: "idle" | "busy";
   lastJob?: string;
+  queueDepth?: number;
 };
 
 let status: WorkerStatus = { state: "idle" };
@@ -36,50 +46,8 @@ let dbHandle: DatabaseHandle | null = null;
 let currentProjectId: string | null = null;
 let currentProjectRoot: string | null = null;
 let watcher: FSWatcher | null = null;
+let jobQueue: PersistentJobQueue<WorkerJob, WorkerJobResult> | null = null;
 const debounceTimers = new Map<string, NodeJS.Timeout>();
-const ingestQueue = new JobQueue<IngestJob, IngestJobResult>(async (job) => {
-  setStatus({ state: "busy", lastJob: job.type });
-  if (dbHandle) {
-    logEvent(dbHandle.db, {
-      projectId: job.payload.projectId,
-      level: "info",
-      eventType: "job_started",
-      payload: { type: job.type, filePath: job.payload.filePath }
-    });
-  }
-  try {
-    const result = await ingestDocument(dbHandle!.db, {
-      projectId: job.payload.projectId,
-      rootPath: currentProjectRoot ?? "",
-      filePath: job.payload.filePath
-    });
-    if (dbHandle) {
-      logEvent(dbHandle.db, {
-        projectId: job.payload.projectId,
-        level: "info",
-        eventType: "job_finished",
-        payload: { type: job.type, filePath: job.payload.filePath }
-      });
-    }
-    return result;
-  } catch (error) {
-    if (dbHandle) {
-      logEvent(dbHandle.db, {
-        projectId: job.payload.projectId,
-        level: "error",
-        eventType: "job_failed",
-        payload: {
-          type: job.type,
-          filePath: job.payload.filePath,
-          message: error instanceof Error ? error.message : "Unknown error"
-        }
-      });
-    }
-    throw error;
-  } finally {
-    setStatus({ state: "idle", lastJob: job.type });
-  }
-});
 
 function setStatus(next: WorkerStatus): void {
   status = next;
@@ -97,9 +65,189 @@ function ensureDb(rootPath: string): DatabaseHandle {
   return dbHandle;
 }
 
+function ensureJobQueue(handle: DatabaseHandle): PersistentJobQueue<WorkerJob, WorkerJobResult> {
+  if (jobQueue) {
+    return jobQueue;
+  }
+  jobQueue = new PersistentJobQueue<WorkerJob, WorkerJobResult>(handle.db, handleJob);
+  jobQueue.start();
+  return jobQueue;
+}
+
+async function handleJob(job: WorkerJob): Promise<WorkerJobResult> {
+  setStatus({ state: "busy", lastJob: job.type });
+  const projectId = (job.payload as { projectId: string }).projectId;
+  if (dbHandle) {
+    logEvent(dbHandle.db, {
+      projectId,
+      level: "info",
+      eventType: "job_started",
+      payload: { type: job.type }
+    });
+  }
+
+  try {
+    let result: WorkerJobResult;
+    switch (job.type) {
+      case "INGEST_DOCUMENT": {
+        if (!currentProjectRoot) {
+          throw new Error("Project root not initialized");
+        }
+        result = await ingestDocument(dbHandle!.db, {
+          projectId,
+          rootPath: currentProjectRoot,
+          filePath: job.payload.filePath
+        });
+
+        if (
+          result.snapshotCreated &&
+          result.changeStart !== null &&
+          result.changeEnd !== null
+        ) {
+          ensureJobQueue(dbHandle!).enqueue(
+            {
+              type: "RUN_SCENES",
+              payload: {
+                projectId,
+                documentId: result.documentId,
+                snapshotId: result.snapshotId,
+                rootPath: currentProjectRoot
+              }
+            },
+            `scenes:${projectId}:${result.documentId}`
+          );
+          ensureJobQueue(dbHandle!).enqueue(
+            {
+              type: "RUN_STYLE",
+              payload: {
+                projectId,
+                documentId: result.documentId,
+                snapshotId: result.snapshotId,
+                rootPath: currentProjectRoot
+              }
+            },
+            `style:${projectId}:${result.documentId}`
+          );
+          ensureJobQueue(dbHandle!).enqueue(
+            {
+              type: "RUN_EXTRACTION",
+              payload: {
+                projectId,
+                documentId: result.documentId,
+                snapshotId: result.snapshotId,
+                rootPath: currentProjectRoot,
+                changeStart: result.changeStart,
+                changeEnd: result.changeEnd
+              }
+            },
+            `extraction:${projectId}:${result.documentId}`
+          );
+        }
+        break;
+      }
+      case "RUN_SCENES": {
+        const payload = job.payload;
+        await runSceneStage({
+          db: dbHandle!.db,
+          projectId: payload.projectId,
+          documentId: payload.documentId,
+          snapshotId: payload.snapshotId,
+          rootPath: payload.rootPath
+        });
+        result = { ok: true };
+        break;
+      }
+      case "RUN_STYLE": {
+        const payload = job.payload;
+        runStyleStage({
+          db: dbHandle!.db,
+          projectId: payload.projectId,
+          documentId: payload.documentId,
+          snapshotId: payload.snapshotId,
+          rootPath: payload.rootPath
+        });
+        result = { ok: true };
+        break;
+      }
+      case "RUN_EXTRACTION": {
+        const payload = job.payload;
+        const extractionResult = await runExtractionStage({
+          db: dbHandle!.db,
+          projectId: payload.projectId,
+          documentId: payload.documentId,
+          snapshotId: payload.snapshotId,
+          rootPath: payload.rootPath,
+          changeStart: payload.changeStart,
+          changeEnd: payload.changeEnd
+        });
+
+        if (extractionResult.touchedEntityIds.length > 0) {
+          ensureJobQueue(dbHandle!).enqueue(
+            {
+              type: "RUN_CONTINUITY",
+              payload: {
+                projectId: payload.projectId,
+                documentId: payload.documentId,
+                snapshotId: payload.snapshotId,
+                rootPath: payload.rootPath,
+                entityIds: extractionResult.touchedEntityIds
+              }
+            },
+            `continuity:${payload.projectId}:${payload.documentId}`
+          );
+        }
+        result = { ok: true };
+        break;
+      }
+      case "RUN_CONTINUITY": {
+        const payload = job.payload;
+        runContinuityStage({
+          db: dbHandle!.db,
+          projectId: payload.projectId,
+          documentId: payload.documentId,
+          snapshotId: payload.snapshotId,
+          rootPath: payload.rootPath,
+          entityIds: payload.entityIds
+        });
+        result = { ok: true };
+        break;
+      }
+      default:
+        throw new Error("Unknown job type");
+    }
+
+    if (dbHandle) {
+      logEvent(dbHandle.db, {
+        projectId,
+        level: "info",
+        eventType: "job_finished",
+        payload: { type: job.type }
+      });
+    }
+
+    return result;
+  } catch (error) {
+    if (dbHandle) {
+      logEvent(dbHandle.db, {
+        projectId,
+        level: "error",
+        eventType: "job_failed",
+        payload: {
+          type: job.type,
+          message: error instanceof Error ? error.message : "Unknown error"
+        }
+      });
+    }
+    throw error;
+  } finally {
+    setStatus({ state: "idle", lastJob: job.type });
+  }
+}
+
 function handleCreateOrOpen(params: { rootPath: string; name?: string }): unknown {
   const { rootPath, name } = params;
   const handle = ensureDb(rootPath);
+  ensureJobQueue(handle);
   const existing = getProjectByRootPath(handle.db, rootPath);
   if (existing) {
     touchProject(handle.db, existing.id);
@@ -121,7 +269,9 @@ function handleCreateOrOpen(params: { rootPath: string; name?: string }): unknow
 function ensureWatcher(db: DatabaseHandle["db"], projectId: string): void {
   if (!watcher) {
     watcher = chokidar.watch([], { ignoreInitial: true });
-    watcher.on("change", (filePath) => scheduleIngest(filePath, projectId));
+    watcher.on("add", (filePath) => handleFileAdd(filePath, projectId));
+    watcher.on("change", (filePath) => handleFileChange(filePath, projectId));
+    watcher.on("unlink", (filePath) => handleFileUnlink(filePath, projectId));
   }
 
   const documents = listDocuments(db, projectId);
@@ -137,15 +287,28 @@ function registerConfigDocuments(projectId: string, rootPath: string): void {
   const config = loadProjectConfig(rootPath);
   for (const entry of config.documents) {
     const filePath = resolveDocumentPath(rootPath, entry);
+    const existing = getDocumentByPath(dbHandle.db, projectId, filePath);
     if (!fs.existsSync(filePath)) {
+      if (existing) {
+        markDocumentMissing(dbHandle.db, existing.id);
+      }
       continue;
     }
     watcher.add(filePath);
+    if (existing) {
+      markDocumentSeen(dbHandle.db, existing.id);
+    }
     void enqueueIngest(filePath, projectId);
   }
 }
 
 function scheduleIngest(filePath: string, projectId: string): void {
+  if (dbHandle) {
+    const existing = getDocumentByPath(dbHandle.db, projectId, filePath);
+    if (existing?.is_missing) {
+      return;
+    }
+  }
   if (dbHandle) {
     logEvent(dbHandle.db, {
       projectId,
@@ -165,9 +328,38 @@ function scheduleIngest(filePath: string, projectId: string): void {
   debounceTimers.set(filePath, timer);
 }
 
-function enqueueIngest(filePath: string, projectId: string): Promise<IngestJobResult> {
-  const job: IngestJob = { type: "INGEST_DOCUMENT", payload: { projectId, filePath } };
-  return ingestQueue.enqueue(job, `${projectId}:${filePath}`);
+function handleFileAdd(filePath: string, projectId: string): void {
+  if (dbHandle) {
+    const existing = getDocumentByPath(dbHandle.db, projectId, filePath);
+    if (existing) {
+      markDocumentSeen(dbHandle.db, existing.id);
+    }
+  }
+  scheduleIngest(filePath, projectId);
+}
+
+function handleFileChange(filePath: string, projectId: string): void {
+  scheduleIngest(filePath, projectId);
+}
+
+function handleFileUnlink(filePath: string, projectId: string): void {
+  if (dbHandle) {
+    const existing = getDocumentByPath(dbHandle.db, projectId, filePath);
+    if (existing) {
+      markDocumentMissing(dbHandle.db, existing.id);
+    }
+    logEvent(dbHandle.db, {
+      projectId,
+      level: "warn",
+      eventType: "file_missing",
+      payload: { filePath }
+    });
+  }
+}
+
+function enqueueIngest(filePath: string, projectId: string, awaitResult = false): Promise<WorkerJobResult> | null {
+  const job: WorkerJob = { type: "INGEST_DOCUMENT", payload: { projectId, filePath } };
+  return ensureJobQueue(dbHandle!).enqueue(job, `ingest:${projectId}:${filePath}`, awaitResult);
 }
 
 async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknown> {
@@ -178,7 +370,16 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
       }
       return handleCreateOrOpen(params as { rootPath: string; name?: string });
     case "project.getStatus":
-      return { ...getStatus(), projectId: currentProjectId };
+      return {
+        ...getStatus(),
+        projectId: currentProjectId,
+        queueDepth: dbHandle ? getQueueDepth(dbHandle.db) : 0
+      };
+    case "project.getProcessingState":
+      if (!dbHandle || !currentProjectId) {
+        throw new Error("Project not initialized");
+      }
+      return listProcessingStates(dbHandle.db, currentProjectId);
     case "project.addDocument":
       {
         if (!params || typeof params !== "object") {
@@ -191,6 +392,15 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
           ensureWatcher(dbHandle.db, currentProjectId);
         }
         const filePath = (params as { path: string }).path;
+        if (!fs.existsSync(filePath)) {
+          logEvent(dbHandle.db, {
+            projectId: currentProjectId,
+            level: "warn",
+            eventType: "file_missing",
+            payload: { filePath }
+          });
+          throw new Error(`File not found: ${filePath}`);
+        }
         watcher?.add(filePath);
         try {
           addDocumentToConfig(currentProjectRoot, filePath);
@@ -205,7 +415,11 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
             }
           });
         }
-        return enqueueIngest(filePath, currentProjectId);
+        const result = enqueueIngest(filePath, currentProjectId, true);
+        if (!result) {
+          throw new Error("Failed to enqueue ingest");
+        }
+        return result;
       }
     case "search.query":
       {
@@ -215,9 +429,10 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
         if (!dbHandle || !currentProjectId) {
           throw new Error("Project not initialized");
         }
+        const query = (params as { query: string }).query;
         return {
-          query: (params as { query: string }).query,
-          results: searchChunks(dbHandle.db, (params as { query: string }).query)
+          query,
+          results: searchChunks(dbHandle.db, query, 8, currentProjectId ?? undefined)
         };
       }
     case "search.ask":

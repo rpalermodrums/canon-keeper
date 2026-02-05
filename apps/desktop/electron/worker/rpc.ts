@@ -13,6 +13,7 @@ export type RpcResponse = {
 export type WorkerMethods =
   | "project.createOrOpen"
   | "project.getStatus"
+  | "project.getProcessingState"
   | "project.addDocument"
   | "search.query"
   | "search.ask"

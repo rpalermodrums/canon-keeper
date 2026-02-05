@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { openDatabase, createProject } from "../storage";
 import { ingestDocument } from "./ingest";
+import { runSceneStage } from "./stages/scenes";
 
 function setupProject(text: string) {
   const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-"));
@@ -22,7 +23,14 @@ describe("scene metadata", () => {
       "I walked into the courtyard. In the courtyard, the air was cold."
     );
 
-    await ingestDocument(db, { projectId, rootPath, filePath });
+    const ingestResult = await ingestDocument(db, { projectId, rootPath, filePath });
+    await runSceneStage({
+      db,
+      projectId,
+      documentId: ingestResult.documentId,
+      snapshotId: ingestResult.snapshotId,
+      rootPath
+    });
 
     const sceneMeta = db
       .prepare(

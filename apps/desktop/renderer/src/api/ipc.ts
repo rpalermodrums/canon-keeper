@@ -11,14 +11,20 @@ export type WorkerStatus = {
   state: "idle" | "busy";
   lastJob?: string;
   projectId?: string | null;
+  queueDepth?: number;
+  workerState?: "ready" | "restarting" | "down";
+  lastError?: string | null;
 };
 
 export type IngestResult = {
   documentId: string;
   snapshotId: string;
+  snapshotCreated: boolean;
   chunksCreated: number;
   chunksUpdated: number;
   chunksDeleted: number;
+  changeStart: number | null;
+  changeEnd: number | null;
 };
 
 export type SearchResult = {
@@ -163,6 +169,23 @@ export async function getWorkerStatus(): Promise<WorkerStatus> {
     throw new Error("IPC not available");
   }
   return window.canonkeeper.project.getStatus();
+}
+
+export async function getProcessingState(): Promise<
+  Array<{
+    document_id: string;
+    snapshot_id: string;
+    stage: string;
+    status: string;
+    error: string | null;
+    updated_at: number;
+    document_path: string;
+  }>
+> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.project.getProcessingState();
 }
 
 export async function addDocument(payload: { path: string }): Promise<IngestResult> {

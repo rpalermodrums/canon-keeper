@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE document ADD COLUMN is_missing INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE document ADD COLUMN last_seen_at INTEGER;
+
+COMMIT;

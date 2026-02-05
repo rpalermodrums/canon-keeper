@@ -58,7 +58,29 @@ app.whenReady().then(() => {
     if (!workerClient) {
       throw new Error("Worker not initialized");
     }
-    return workerClient.request("project.getStatus");
+    const workerState = workerClient.getState();
+    if (workerState !== "ready") {
+      return {
+        state: "idle",
+        lastJob: undefined,
+        projectId: null,
+        queueDepth: 0,
+        workerState,
+        lastError: workerClient.getLastError()
+      };
+    }
+    const status = (await workerClient.request("project.getStatus")) as Record<string, unknown>;
+    return {
+      ...status,
+      workerState,
+      lastError: workerClient.getLastError()
+    };
+  });
+  ipcMain.handle("project:getProcessingState", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("project.getProcessingState");
   });
   ipcMain.handle("project:addDocument", async (_event, payload) => {
     if (!workerClient) {

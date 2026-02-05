@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("canonkeeper", {
     createOrOpen: async (payload: { rootPath: string; name?: string }) =>
       ipcRenderer.invoke("project:createOrOpen", payload),
     getStatus: async () => ipcRenderer.invoke("project:getStatus"),
+    getProcessingState: async () => ipcRenderer.invoke("project:getProcessingState"),
     addDocument: async (payload: { path: string }) =>
       ipcRenderer.invoke("project:addDocument", payload)
   },

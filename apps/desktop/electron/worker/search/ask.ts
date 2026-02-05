@@ -39,7 +39,7 @@ export async function askQuestion(
   db: Database.Database,
   args: { projectId: string; rootPath: string; question: string }
 ): Promise<AskResult> {
-  const snippets = searchChunks(db, args.question, 8);
+  const snippets = searchChunks(db, args.question, 8, args.projectId);
   const provider = buildProvider(args.rootPath);
   if (!(await provider.isAvailable())) {
     return {

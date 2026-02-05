@@ -33,6 +33,8 @@ export interface DocumentRow {
   kind: DocumentKind;
   created_at: UnixMillis;
   updated_at: UnixMillis;
+  is_missing: number;
+  last_seen_at: UnixMillis | null;
 }
 
 /**
@@ -252,6 +254,38 @@ export interface StyleMetricRow {
   metric_name: StyleMetricName;
   metric_json: string; // JSON string for metric payload
   created_at: UnixMillis;
+  updated_at: UnixMillis;
+}
+
+/**
+ * Table: job_queue
+ */
+export type JobQueueStatus = "queued" | "running" | "failed";
+
+export interface JobQueueRow {
+  id: ID;
+  project_id: ID;
+  type: string;
+  payload_json: string;
+  dedupe_key: string;
+  status: JobQueueStatus;
+  attempts: number;
+  next_run_at: UnixMillis;
+  created_at: UnixMillis;
+  updated_at: UnixMillis;
+}
+
+/**
+ * Table: document_processing_state
+ */
+export type ProcessingStatus = "pending" | "ok" | "failed";
+
+export interface ProcessingStateRow {
+  document_id: ID;
+  snapshot_id: ID;
+  stage: string;
+  status: ProcessingStatus;
+  error: string | null;
   updated_at: UnixMillis;
 }
 

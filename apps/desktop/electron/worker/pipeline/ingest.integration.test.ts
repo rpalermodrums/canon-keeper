@@ -5,6 +5,9 @@ import path from "node:path";
 import { openDatabase, createProject, listChunksForDocument, listScenesForProject, listIssuesWithEvidence } from "../storage";
 import { ingestDocument } from "./ingest";
 import { searchChunks } from "../search/fts";
+import { runSceneStage } from "./stages/scenes";
+import { runExtractionStage } from "./stages/extraction";
+import { runContinuityStage } from "./stages/continuity";
 
 const fixturesDir = path.resolve(process.cwd(), "data", "fixtures");
 
@@ -34,10 +37,18 @@ describe("ingestDocument integration", () => {
     const setup = setupProject("simple_md.md");
     tempRoots.push(setup.rootPath);
 
-    await ingestDocument(setup.db, {
+    const ingestResult = await ingestDocument(setup.db, {
       projectId: setup.projectId,
       rootPath: setup.rootPath,
       filePath: setup.docPath
+    });
+
+    await runSceneStage({
+      db: setup.db,
+      projectId: setup.projectId,
+      documentId: ingestResult.documentId,
+      snapshotId: ingestResult.snapshotId,
+      rootPath: setup.rootPath
     });
 
     const documents = setup.db
@@ -63,10 +74,29 @@ describe("ingestDocument integration", () => {
     const setup = setupProject("contradiction.md");
     tempRoots.push(setup.rootPath);
 
-    await ingestDocument(setup.db, {
+    const ingestResult = await ingestDocument(setup.db, {
       projectId: setup.projectId,
       rootPath: setup.rootPath,
       filePath: setup.docPath
+    });
+
+    const extractionResult = await runExtractionStage({
+      db: setup.db,
+      projectId: setup.projectId,
+      documentId: ingestResult.documentId,
+      snapshotId: ingestResult.snapshotId,
+      rootPath: setup.rootPath,
+      changeStart: ingestResult.changeStart,
+      changeEnd: ingestResult.changeEnd
+    });
+
+    runContinuityStage({
+      db: setup.db,
+      projectId: setup.projectId,
+      documentId: ingestResult.documentId,
+      snapshotId: ingestResult.snapshotId,
+      rootPath: setup.rootPath,
+      entityIds: extractionResult.touchedEntityIds
     });
 
     const issues = listIssuesWithEvidence(setup.db, setup.projectId);

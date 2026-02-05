@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { logEvent } from "../storage";
 
 export type SearchResult = {
   chunkId: string;
@@ -10,11 +11,24 @@ export type SearchResult = {
   score: number;
 };
 
+function sanitizeQuery(query: string): string {
+  const tokens = query
+    .split(/\s+/)
+    .map((token) => token.replace(/["']/g, "").trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return "";
+  return tokens.map((token) => `"${token}"`).join(" AND ");
+}
+
 export function searchChunks(
   db: Database.Database,
   query: string,
-  limit = 8
+  limit = 8,
+  projectId?: string
 ): SearchResult[] {
+  if (!query.trim()) {
+    return [];
+  }
   const stmt = db.prepare(
     `
     SELECT
@@ -34,5 +48,39 @@ export function searchChunks(
   `
   );
 
-  return stmt.all(query, limit) as SearchResult[];
+  try {
+    return stmt.all(query, limit) as SearchResult[];
+  } catch (error) {
+    if (projectId) {
+      logEvent(db, {
+        projectId,
+        level: "warn",
+        eventType: "fts_query_failed",
+        payload: {
+          query,
+          message: error instanceof Error ? error.message : "Unknown error"
+        }
+      });
+    }
+    const fallback = sanitizeQuery(query);
+    if (!fallback) {
+      return [];
+    }
+    try {
+      return stmt.all(fallback, limit) as SearchResult[];
+    } catch (fallbackError) {
+      if (projectId) {
+        logEvent(db, {
+          projectId,
+          level: "warn",
+          eventType: "fts_query_failed",
+          payload: {
+            query: fallback,
+            message: fallbackError instanceof Error ? fallbackError.message : "Unknown error"
+          }
+        });
+      }
+      return [];
+    }
+  }
 }
