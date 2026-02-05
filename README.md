@@ -103,6 +103,7 @@ pnpm test
 ```
 
 Pre-commit hooks (lefthook) run lint + typecheck, and pre-push runs tests.
+GitHub Actions CI runs lint, typecheck, and tests on pushes and pull requests.
 
 ## Evidence-first behavior
 - Claims are only surfaced when evidence is present.
