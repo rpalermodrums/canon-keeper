@@ -90,6 +90,18 @@ function findAliasEvidence(
   return null;
 }
 
+function countAliasOccurrences(chunks: ChunkRecord[], alias: string): number {
+  const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b`, "gi");
+  let count = 0;
+  for (const chunk of chunks) {
+    const matches = chunk.text.match(pattern);
+    if (matches) {
+      count += matches.length;
+    }
+  }
+  return count;
+}
+
 function findSettingPhraseEvidence(
   chunks: ChunkRecord[]
 ): { chunkId: string; quoteStart: number; quoteEnd: number; phrase: string } | null {
@@ -228,12 +240,17 @@ export async function runSceneMetadata(
     const sceneEntityIds = new Set<string>();
     for (const character of characterEntities) {
       const aliases = [character.display_name, ...listAliases(db, character.id)];
+      let maxCount = 0;
       for (const alias of aliases) {
-        if (findAliasEvidence(scopedChunks, alias)) {
-          sceneEntityIds.add(character.id);
-          sceneEntities.push({ entityId: character.id, role: "mentioned", confidence: 0.5 });
-          break;
-        }
+        maxCount = Math.max(maxCount, countAliasOccurrences(scopedChunks, alias));
+      }
+      if (maxCount > 0) {
+        sceneEntityIds.add(character.id);
+        sceneEntities.push({
+          entityId: character.id,
+          role: maxCount >= 2 ? "present" : "mentioned",
+          confidence: maxCount >= 2 ? 0.6 : 0.4
+        });
       }
     }
 
