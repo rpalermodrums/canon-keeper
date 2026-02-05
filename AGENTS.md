@@ -369,4 +369,10 @@ The project is acceptable when:
 ## Notes on scope
 
 The point of this project is to **empower** the writer by reducing continuity bookkeeping, not to replace authorship. If an implementation choice increases output generation at the cost of agency or trust, choose the trust-preserving option.
+
+---
+
+## Implementation notes (living)
+- Dev workflow: Vite for renderer; Electron main runs via `tsx` in dev. Preload is only wired when compiled (no preload in dev).
+- Tooling: ESLint + Prettier + Vitest at repo root; Lefthook runs lint/typecheck on `pre-commit` and tests on `pre-push`.
 ```
