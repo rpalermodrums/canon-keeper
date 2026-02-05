@@ -13,10 +13,11 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.eslint.json --noEmit",
+    "typecheck": "pnpm -C apps/desktop typecheck && pnpm -C packages/shared typecheck",
     "prepare": "lefthook install"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.11.30",
     "@typescript-eslint/eslint-plugin": "^7.4.0",
     "@typescript-eslint/parser": "^7.4.0",
