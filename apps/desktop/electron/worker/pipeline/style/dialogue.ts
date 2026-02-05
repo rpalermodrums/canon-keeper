@@ -32,7 +32,14 @@ const SPEAKER_VERBS = [
   "called",
   "yelled",
   "cried",
-  "answered"
+  "answered",
+  "murmured",
+  "sighed",
+  "snapped",
+  "added",
+  "remarked",
+  "laughed",
+  "grumbled"
 ];
 
 const FILLERS = ["well", "look", "listen", "like", "you know", "okay"];

@@ -103,6 +103,18 @@ function countAliasOccurrences(chunks: ChunkRecord[], alias: string): number {
   return count;
 }
 
+function countAliasInDialogue(lines: Array<{ text: string }>, alias: string): number {
+  const pattern = new RegExp(`\\b${escapeRegExp(alias)}\\b`, "gi");
+  let count = 0;
+  for (const line of lines) {
+    const matches = line.text.match(pattern);
+    if (matches) {
+      count += matches.length;
+    }
+  }
+  return count;
+}
+
 function findSettingPhraseEvidence(
   chunks: ChunkRecord[]
 ): { chunkId: string; quoteStart: number; quoteEnd: number; phrase: string } | null {
@@ -255,8 +267,10 @@ export async function runSceneMetadata(
     for (const character of characterEntities) {
       const aliases = [character.display_name, ...listAliases(db, character.id)];
       let maxCount = 0;
+      let dialogueMentions = 0;
       for (const alias of aliases) {
         maxCount = Math.max(maxCount, countAliasOccurrences(scopedChunks, alias));
+        dialogueMentions = Math.max(dialogueMentions, countAliasInDialogue(dialogueLines, alias));
       }
       if (maxCount > 0) {
         sceneEntityIds.add(character.id);
@@ -265,7 +279,15 @@ export async function runSceneMetadata(
           sceneEntities.push({
             entityId: character.id,
             role: "present",
-            confidence: 0.7
+            confidence: 0.75
+          });
+          continue;
+        }
+        if (dialogueMentions > 0) {
+          sceneEntities.push({
+            entityId: character.id,
+            role: "present",
+            confidence: 0.6
           });
           continue;
         }

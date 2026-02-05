@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import {
   clearIssuesByType,
+  deleteIssuesByTypeAndDocument,
   deleteStyleMetricsByName,
   getOrCreateEntityByName,
   insertIssue,
@@ -182,23 +183,59 @@ export function runStyleMetrics(
     }
   }
 
+  const baselineScenes = scenes.slice(0, 10);
+  const baselineDocIds = new Set(baselineScenes.map((scene) => scene.document_id));
+  const updateAll =
+    !targetDocIds ||
+    Array.from(targetDocIds).some((docId) => baselineDocIds.has(docId));
+
+  const updatedSceneIds = new Set<string>();
+
   for (const scene of scenes) {
-    const shouldRecompute = targetDocIds ? targetDocIds.has(scene.document_id) : true;
-    if (shouldRecompute || !toneVectors.has(scene.id)) {
+    const shouldRecompute =
+      updateAll ||
+      (targetDocIds ? targetDocIds.has(scene.document_id) : false) ||
+      !toneVectors.has(scene.id);
+    if (shouldRecompute) {
       const docChunks = getChunks(scene.document_id);
       toneVectors.set(scene.id, computeToneVector(buildSceneText(scene, docChunks)));
+      updatedSceneIds.add(scene.id);
     }
   }
 
-  const baselineVectors = scenes
-    .slice(0, 10)
-    .map((scene) => toneVectors.get(scene.id) ?? computeToneVector(""));
+  const baselineVectors = baselineScenes.map((scene) => {
+    const existing = toneVectors.get(scene.id);
+    if (existing) {
+      return existing;
+    }
+    const docChunks = getChunks(scene.document_id);
+    const vector = computeToneVector(buildSceneText(scene, docChunks));
+    toneVectors.set(scene.id, vector);
+    updatedSceneIds.add(scene.id);
+    return vector;
+  });
   const baseline = computeToneBaseline(baselineVectors);
 
-  deleteStyleMetricsByName(db, { projectId, scopeType: "scene", metricName: "tone_vector" });
-  clearIssuesByType(db, projectId, "tone_drift");
+  if (updateAll) {
+    deleteStyleMetricsByName(db, { projectId, scopeType: "scene", metricName: "tone_vector" });
+    clearIssuesByType(db, projectId, "tone_drift");
+  } else if (updatedSceneIds.size > 0) {
+    const docsToClear = new Set<string>();
+    for (const scene of scenes) {
+      if (updatedSceneIds.has(scene.id)) {
+        docsToClear.add(scene.document_id);
+      }
+    }
+    for (const docId of docsToClear) {
+      deleteIssuesByTypeAndDocument(db, projectId, "tone_drift", docId);
+    }
+  }
 
-  for (const scene of scenes) {
+  const scenesToScore = updateAll
+    ? scenes
+    : scenes.filter((scene) => updatedSceneIds.has(scene.id));
+
+  for (const scene of scenesToScore) {
     const vector = toneVectors.get(scene.id) ?? computeToneVector("");
     const metric = computeToneMetric(scene.id, vector, baseline);
     replaceStyleMetric(db, {
