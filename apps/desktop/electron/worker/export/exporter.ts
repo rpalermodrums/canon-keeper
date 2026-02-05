@@ -10,6 +10,7 @@ import {
   listDocuments,
   listEntities,
   listEvidenceForClaim,
+  listSceneEvidence,
   listScenesForProject,
   listStyleMetrics
 } from "../storage";
@@ -53,6 +54,13 @@ function listSceneEntities(db: Database.Database, sceneId: string): string[] {
 }
 
 function buildSceneEvidence(db: Database.Database, sceneId: string): Citation[] {
+  const evidence = listSceneEvidence(db, sceneId).map((row) => ({
+    chunkId: row.chunk_id,
+    quoteStart: row.quote_start,
+    quoteEnd: row.quote_end
+  }));
+  if (evidence.length > 0) return evidence;
+
   const chunkRow = db
     .prepare("SELECT start_chunk_id FROM scene WHERE id = ?")
     .get(sceneId) as { start_chunk_id: string } | undefined;
@@ -255,6 +263,11 @@ export function exportProject(
       "SELECT id, scene_id, entity_id, role, confidence, created_at FROM scene_entity WHERE scene_id IN (SELECT id FROM scene WHERE project_id = ?)"
     )
     .all(projectId);
+  const sceneEvidence = db
+    .prepare(
+      "SELECT id, scene_id, chunk_id, quote_start, quote_end, created_at FROM scene_evidence WHERE scene_id IN (SELECT id FROM scene WHERE project_id = ?)"
+    )
+    .all(projectId);
   const issues = db
     .prepare(
       "SELECT id, project_id, type, severity, title, description, status, created_at, updated_at FROM issue WHERE project_id = ?"
@@ -283,6 +296,7 @@ export function exportProject(
     scenes,
     sceneMetadata,
     sceneEntities,
+    sceneEvidence,
     issues,
     issueEvidence,
     styleMetrics,
