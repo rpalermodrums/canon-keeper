@@ -137,30 +137,42 @@ export async function ingestDocument(
   })();
 
   const storedChunks = listChunksForDocument(db, document.id);
+  const changeStart = prefix;
+  const changeEnd = newChunks.length - suffix - 1;
+  const hasChanges = changeStart <= changeEnd;
+  const extractionRangeStart = Math.max(0, changeStart - 1);
+  const extractionRangeEnd = Math.min(storedChunks.length - 1, changeEnd + 1);
+  const extractionChunks = hasChanges
+    ? storedChunks.filter(
+        (chunk) => chunk.ordinal >= extractionRangeStart && chunk.ordinal <= extractionRangeEnd
+      )
+    : [];
   const scenes = buildScenesFromChunks(args.projectId, document.id, storedChunks);
   replaceScenesForDocument(db, document.id, scenes);
   await runSceneMetadata(db, args.projectId, document.id, args.rootPath);
   runStyleMetrics(db, args.projectId);
-  try {
-    await runExtraction(db, {
-      projectId: args.projectId,
-      rootPath: args.rootPath,
-      chunks: storedChunks.map((chunk) => ({
-        id: chunk.id,
-        ordinal: chunk.ordinal,
-        text: chunk.text
-      }))
-    });
-  } catch (error) {
-    logEvent(db, {
-      projectId: args.projectId,
-      level: "error",
-      eventType: "extraction_failed",
-      payload: {
-        documentId: document.id,
-        message: error instanceof Error ? error.message : "Unknown error"
-      }
-    });
+  if (extractionChunks.length > 0) {
+    try {
+      await runExtraction(db, {
+        projectId: args.projectId,
+        rootPath: args.rootPath,
+        chunks: extractionChunks.map((chunk) => ({
+          id: chunk.id,
+          ordinal: chunk.ordinal,
+          text: chunk.text
+        }))
+      });
+    } catch (error) {
+      logEvent(db, {
+        projectId: args.projectId,
+        level: "error",
+        eventType: "extraction_failed",
+        payload: {
+          documentId: document.id,
+          message: error instanceof Error ? error.message : "Unknown error"
+        }
+      });
+    }
   }
   runContinuityChecks(db, args.projectId);
 

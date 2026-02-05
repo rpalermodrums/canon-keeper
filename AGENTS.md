@@ -386,4 +386,5 @@ The point of this project is to **empower** the writer by reducing continuity bo
 - Confirmed claims now copy evidence from the source inferred claim to preserve evidence-first guarantees.
 - LLM scene metadata: optional LLM classifier (schema-validated, evidence-mapped) can override deterministic scene metadata when evidence is found.
 - Scene entities: characters are tagged as `present` when their name appears 2+ times in a scene, otherwise `mentioned`.
+- Incremental extraction: LLM/extraction runs only on changed chunk ranges with a 1-chunk context window.
 ```
