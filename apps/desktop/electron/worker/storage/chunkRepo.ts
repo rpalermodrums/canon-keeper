@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import crypto from "node:crypto";
-import type { ChunkRow } from "../../../../packages/shared/types/persisted";
+import type { ChunkRow } from "../../../../../packages/shared/types/persisted";
 
 export type ChunkRecord = Pick<
   ChunkRow,

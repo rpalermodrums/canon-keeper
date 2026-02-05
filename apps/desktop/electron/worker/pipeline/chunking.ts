@@ -1,4 +1,4 @@
-import { hashText } from "../../../../packages/shared/utils/hashing";
+import { hashText } from "../../../../../packages/shared/utils/hashing";
 
 export type BlockSpan = {
   start: number;

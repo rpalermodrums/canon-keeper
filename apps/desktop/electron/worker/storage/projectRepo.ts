@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import crypto from "node:crypto";
 import path from "node:path";
-import type { ProjectRow } from "../../../../packages/shared/types/persisted";
+import type { ProjectRow } from "../../../../../packages/shared/types/persisted";
 
 export type ProjectSummary = Pick<ProjectRow, "id" | "root_path" | "name" | "created_at" | "updated_at">;
 

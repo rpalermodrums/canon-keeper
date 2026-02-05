@@ -3,8 +3,8 @@ import path from "node:path";
 import mammoth from "mammoth";
 import type Database from "better-sqlite3";
 import { buildChunks, type ChunkSpan } from "./chunking";
-import { hashText } from "../../../../packages/shared/utils/hashing";
-import type { DocumentKind } from "../../../../packages/shared/types/persisted";
+import { hashText } from "../../../../../packages/shared/utils/hashing";
+import type { DocumentKind } from "../../../../../packages/shared/types/persisted";
 import {
   createDocument,
   deleteChunksByIds,
@@ -44,15 +44,15 @@ async function extractText(filePath: string, kind: DocumentKind): Promise<string
 function diffByHash(existing: { id: string; text_hash: string }[], next: ChunkSpan[]) {
   const minLen = Math.min(existing.length, next.length);
   let prefix = 0;
-  while (prefix < minLen && existing[prefix].text_hash === next[prefix].text_hash) {
+  while (prefix < minLen && existing[prefix]?.text_hash === next[prefix]?.text_hash) {
     prefix += 1;
   }
 
   let suffix = 0;
   while (
     suffix < minLen - prefix &&
-    existing[existing.length - 1 - suffix].text_hash ===
-      next[next.length - 1 - suffix].text_hash
+    existing[existing.length - 1 - suffix]?.text_hash ===
+      next[next.length - 1 - suffix]?.text_hash
   ) {
     suffix += 1;
   }
@@ -85,12 +85,22 @@ export async function ingestDocument(
 
   const updates: Array<{ id: string; chunk: ChunkSpan }> = [];
   for (let i = 0; i < prefix; i += 1) {
-    updates.push({ id: existingChunks[i].id, chunk: newChunks[i] });
+    const existingChunk = existingChunks[i];
+    const newChunk = newChunks[i];
+    if (!existingChunk || !newChunk) {
+      continue;
+    }
+    updates.push({ id: existingChunk.id, chunk: newChunk });
   }
   for (let i = 0; i < suffix; i += 1) {
     const oldIndex = existingChunks.length - 1 - i;
     const newIndex = newChunks.length - 1 - i;
-    updates.push({ id: existingChunks[oldIndex].id, chunk: newChunks[newIndex] });
+    const existingChunk = existingChunks[oldIndex];
+    const newChunk = newChunks[newIndex];
+    if (!existingChunk || !newChunk) {
+      continue;
+    }
+    updates.push({ id: existingChunk.id, chunk: newChunk });
   }
 
   db.transaction(() => {

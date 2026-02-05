@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import crypto from "node:crypto";
-import type { DocumentKind, DocumentRow } from "../../../../packages/shared/types/persisted";
+import type { DocumentKind, DocumentRow } from "../../../../../packages/shared/types/persisted";
 
 export type DocumentSummary = Pick<
   DocumentRow,

@@ -7,7 +7,7 @@ export type MigrationResult = {
   skipped: string[];
 };
 
-function ensureSchemaTable(db: Database): void {
+function ensureSchemaTable(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +27,7 @@ function listMigrationFiles(dir: string): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
-export function runMigrations(db: Database, migrationsDir: string): MigrationResult {
+export function runMigrations(db: Database.Database, migrationsDir: string): MigrationResult {
   ensureSchemaTable(db);
 
   const appliedRows = db.prepare("SELECT filename FROM schema_migrations").all() as Array<{
