@@ -179,3 +179,66 @@ export function dismissIssue(db: Database.Database, issueId: string): void {
     issueId
   );
 }
+
+export function deleteIssuesByIds(db: Database.Database, issueIds: string[]): void {
+  if (issueIds.length === 0) {
+    return;
+  }
+  const deleteEvidence = db.prepare("DELETE FROM issue_evidence WHERE issue_id = ?");
+  const deleteIssue = db.prepare("DELETE FROM issue WHERE id = ?");
+
+  const tx = db.transaction((ids: string[]) => {
+    for (const id of ids) {
+      deleteEvidence.run(id);
+      deleteIssue.run(id);
+    }
+  });
+  tx(issueIds);
+}
+
+export function deleteIssuesByTypeAndDocument(
+  db: Database.Database,
+  projectId: string,
+  type: string,
+  documentId: string
+): void {
+  const issueRows = db
+    .prepare(
+      `SELECT DISTINCT i.id
+       FROM issue i
+       JOIN issue_evidence e ON e.issue_id = i.id
+       JOIN chunk c ON c.id = e.chunk_id
+       WHERE i.project_id = ? AND i.type = ? AND c.document_id = ?`
+    )
+    .all(projectId, type, documentId) as Array<{ id: string }>;
+
+  deleteIssuesByIds(
+    db,
+    issueRows.map((row) => row.id)
+  );
+}
+
+export function deleteIssuesByTypeAndChunkIds(
+  db: Database.Database,
+  projectId: string,
+  type: string,
+  chunkIds: string[]
+): void {
+  if (chunkIds.length === 0) {
+    return;
+  }
+  const placeholders = chunkIds.map(() => "?").join(", ");
+  const issueRows = db
+    .prepare(
+      `SELECT DISTINCT i.id
+       FROM issue i
+       JOIN issue_evidence e ON e.issue_id = i.id
+       WHERE i.project_id = ? AND i.type = ? AND e.chunk_id IN (${placeholders})`
+    )
+    .all(projectId, type, ...chunkIds) as Array<{ id: string }>;
+
+  deleteIssuesByIds(
+    db,
+    issueRows.map((row) => row.id)
+  );
+}

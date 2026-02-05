@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDialogueTics, extractDialogueLines, pickDialogueIssues } from "./dialogue";
+import { computeDialogueTics, extractDialogueLines, mergeDialogueTics, pickDialogueIssues } from "./dialogue";
 import type { ChunkRecord } from "../../storage/chunkRepo";
 
 const chunk = (overrides: Partial<ChunkRecord>): ChunkRecord => ({
@@ -38,5 +38,38 @@ describe("dialogue extraction", () => {
     const issues = pickDialogueIssues(tics);
     expect(issues.length).toBe(1);
     expect(issues[0]?.speaker).toBe("Mira");
+  });
+
+  it("merges dialogue tics across documents", () => {
+    const ticsA = [
+      {
+        speaker: "Mira",
+        totalLines: 2,
+        starters: [{ phrase: "well look", count: 2 }],
+        fillers: [],
+        ellipsesCount: 1,
+        dashCount: 0,
+        examples: [{ chunkId: "c1", quoteStart: 0, quoteEnd: 5 }]
+      }
+    ];
+    const ticsB = [
+      {
+        speaker: "Mira",
+        totalLines: 1,
+        starters: [{ phrase: "well look", count: 1 }],
+        fillers: [{ filler: "well", count: 1 }],
+        ellipsesCount: 0,
+        dashCount: 1,
+        examples: [{ chunkId: "c2", quoteStart: 10, quoteEnd: 15 }]
+      }
+    ];
+
+    const merged = mergeDialogueTics([ticsA, ticsB]);
+    expect(merged.length).toBe(1);
+    expect(merged[0]?.totalLines).toBe(3);
+    expect(merged[0]?.starters[0]?.count).toBe(3);
+    expect(merged[0]?.fillers[0]?.count).toBe(1);
+    expect(merged[0]?.ellipsesCount).toBe(1);
+    expect(merged[0]?.dashCount).toBe(1);
   });
 });

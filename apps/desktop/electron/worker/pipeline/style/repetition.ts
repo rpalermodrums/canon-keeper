@@ -21,6 +21,16 @@ export type RepetitionIssue = {
   quoteEnd: number;
 };
 
+export type RepetitionCounts = Record<
+  string,
+  {
+    n: number;
+    count: number;
+    byScene: Record<string, number>;
+    example?: { chunkId: string; quoteStart: number; quoteEnd: number };
+  }
+>;
+
 const DEFAULT_PROJECT_THRESHOLD = 12;
 const DEFAULT_SCENE_THRESHOLD = 3;
 const MAX_RESULTS = 50;
@@ -45,10 +55,10 @@ function buildSceneIndex(scenes: SceneSummary[], chunks: ChunkRecord[]): Map<str
   return sceneForChunk;
 }
 
-export function computeRepetitionMetrics(
+export function computeRepetitionCounts(
   chunks: ChunkRecord[],
   scenes: SceneSummary[]
-): { metric: RepetitionMetric; issues: RepetitionIssue[] } {
+): RepetitionCounts {
   const sceneIndex = buildSceneIndex(scenes, chunks);
   const counts = new Map<
     string,
@@ -89,10 +99,59 @@ export function computeRepetitionMetrics(
     }
   }
 
-  const filtered = Array.from(counts.entries())
+  const result: RepetitionCounts = {};
+  for (const [ngram, entry] of counts.entries()) {
+    result[ngram] = {
+      n: entry.n,
+      count: entry.count,
+      byScene: Object.fromEntries(entry.byScene.entries()),
+      example: entry.example
+        ? {
+            chunkId: entry.example.chunkId,
+            quoteStart: entry.example.quoteStart,
+            quoteEnd: entry.example.quoteEnd
+          }
+        : undefined
+    };
+  }
+
+  return result;
+}
+
+export function mergeRepetitionCounts(countsList: RepetitionCounts[]): RepetitionCounts {
+  const merged: RepetitionCounts = {};
+
+  for (const counts of countsList) {
+    for (const [ngram, entry] of Object.entries(counts)) {
+      const existing = merged[ngram] ?? {
+        n: entry.n,
+        count: 0,
+        byScene: {} as Record<string, number>
+      };
+
+      existing.count += entry.count;
+      for (const [sceneId, sceneCount] of Object.entries(entry.byScene ?? {})) {
+        existing.byScene[sceneId] = (existing.byScene[sceneId] ?? 0) + sceneCount;
+      }
+
+      if (!existing.example && entry.example) {
+        existing.example = entry.example;
+      }
+
+      merged[ngram] = existing;
+    }
+  }
+
+  return merged;
+}
+
+export function buildRepetitionMetricFromCounts(
+  counts: RepetitionCounts
+): { metric: RepetitionMetric; issues: RepetitionIssue[] } {
+  const filtered = Object.entries(counts)
     .map(([ngram, entry]) => ({ ngram, ...entry }))
     .filter((entry) => {
-      const sceneMax = Math.max(0, ...entry.byScene.values());
+      const sceneMax = Math.max(0, ...Object.values(entry.byScene));
       return entry.count >= DEFAULT_PROJECT_THRESHOLD || sceneMax >= DEFAULT_SCENE_THRESHOLD;
     })
     .sort((a, b) => b.count - a.count)
@@ -103,7 +162,7 @@ export function computeRepetitionMetrics(
       ngram: entry.ngram,
       n: entry.n,
       count: entry.count,
-      byScene: Array.from(entry.byScene.entries()).map(([sceneId, count]) => ({
+      byScene: Object.entries(entry.byScene).map(([sceneId, count]) => ({
         sceneId,
         count
       })),
@@ -125,9 +184,17 @@ export function computeRepetitionMetrics(
     .slice(0, 10);
 
   for (const issue of issues) {
-    const count = counts.get(issue.ngram)?.count ?? issue.count;
+    const count = counts[issue.ngram]?.count ?? issue.count;
     issue.count = count;
   }
 
   return { metric, issues };
+}
+
+export function computeRepetitionMetrics(
+  chunks: ChunkRecord[],
+  scenes: SceneSummary[]
+): { metric: RepetitionMetric; issues: RepetitionIssue[] } {
+  const counts = computeRepetitionCounts(chunks, scenes);
+  return buildRepetitionMetricFromCounts(counts);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeRepetitionMetrics } from "./repetition";
+import { computeRepetitionMetrics, mergeRepetitionCounts, type RepetitionCounts } from "./repetition";
 import type { ChunkRecord } from "../../storage/chunkRepo";
 import type { SceneSummary } from "../../storage/sceneRepo";
 
@@ -46,5 +46,29 @@ describe("computeRepetitionMetrics", () => {
     const result = computeRepetitionMetrics(chunks, scenes);
     const top = result.metric.top.map((entry) => entry.ngram);
     expect(top).toContain("cold");
+  });
+
+  it("merges repetition counts across documents", () => {
+    const a: RepetitionCounts = {
+      cold: {
+        n: 1,
+        count: 2,
+        byScene: { s1: 2 },
+        example: { chunkId: "c1", quoteStart: 0, quoteEnd: 4 }
+      }
+    };
+    const b: RepetitionCounts = {
+      cold: {
+        n: 1,
+        count: 1,
+        byScene: { s2: 1 },
+        example: { chunkId: "c2", quoteStart: 10, quoteEnd: 14 }
+      }
+    };
+
+    const merged = mergeRepetitionCounts([a, b]);
+    expect(merged.cold?.count).toBe(3);
+    expect(merged.cold?.byScene.s1).toBe(2);
+    expect(merged.cold?.byScene.s2).toBe(1);
   });
 });

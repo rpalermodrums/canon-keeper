@@ -30,6 +30,24 @@ export function replaceStyleMetric(db: Database.Database, input: StyleMetricInpu
   );
 }
 
+export function deleteStyleMetricsByName(
+  db: Database.Database,
+  args: { projectId: string; scopeType?: StyleScopeType; metricName: StyleMetricName }
+): void {
+  if (args.scopeType) {
+    db.prepare("DELETE FROM style_metric WHERE project_id = ? AND scope_type = ? AND metric_name = ?").run(
+      args.projectId,
+      args.scopeType,
+      args.metricName
+    );
+    return;
+  }
+  db.prepare("DELETE FROM style_metric WHERE project_id = ? AND metric_name = ?").run(
+    args.projectId,
+    args.metricName
+  );
+}
+
 export function listStyleMetrics(
   db: Database.Database,
   args: { projectId: string; scopeType?: StyleScopeType; scopeId?: string }

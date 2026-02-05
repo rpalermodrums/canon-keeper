@@ -1,53 +1,146 @@
 import type Database from "better-sqlite3";
 import {
   clearIssuesByType,
+  deleteStyleMetricsByName,
+  getOrCreateEntityByName,
   insertIssue,
   insertIssueEvidence,
+  listAliases,
   listChunksForDocument,
   listDocuments,
+  listEntities,
   listScenesForProject,
-  replaceStyleMetric,
-  getOrCreateEntityByName
+  listStyleMetrics,
+  replaceStyleMetric
 } from "../../storage";
 import type { ChunkRecord } from "../../storage/chunkRepo";
 import type { SceneSummary } from "../../storage/sceneRepo";
-import { computeRepetitionMetrics } from "./repetition";
-import { computeToneMetrics } from "./tone";
-import { computeDialogueTics, extractDialogueLines, pickDialogueIssues } from "./dialogue";
+import {
+  buildRepetitionMetricFromCounts,
+  computeRepetitionCounts,
+  mergeRepetitionCounts,
+  type RepetitionCounts
+} from "./repetition";
+import { computeToneBaseline, computeToneMetric, computeToneVector, type ToneVector } from "./tone";
+import {
+  computeDialogueTics,
+  extractDialogueLines,
+  mergeDialogueTics,
+  pickDialogueIssues,
+  type DialogueTic
+} from "./dialogue";
 
 const DRIFT_THRESHOLD = 2.5;
 
-function buildChunkIndex(chunks: ChunkRecord[]): Map<string, ChunkRecord> {
-  return new Map(chunks.map((chunk) => [chunk.id, chunk]));
-}
+export type StyleRunOptions = {
+  documentId?: string;
+};
 
-function gatherProjectChunks(db: Database.Database, projectId: string): ChunkRecord[] {
-  const documents = listDocuments(db, projectId);
-  const chunks: ChunkRecord[] = [];
-  for (const doc of documents) {
-    chunks.push(...listChunksForDocument(db, doc.id));
+function buildSceneText(scene: SceneSummary, chunks: ChunkRecord[]): string {
+  const chunkOrdinalById = new Map(chunks.map((chunk) => [chunk.id, chunk.ordinal]));
+  const startOrdinal = chunkOrdinalById.get(scene.start_chunk_id);
+  const endOrdinal = chunkOrdinalById.get(scene.end_chunk_id);
+  if (startOrdinal === undefined || endOrdinal === undefined) {
+    return "";
   }
-  return chunks;
+  return chunks
+    .filter((chunk) => chunk.ordinal >= startOrdinal && chunk.ordinal <= endOrdinal)
+    .map((chunk) => chunk.text)
+    .join("\n");
 }
 
-function firstChunkForScene(scene: SceneSummary, chunkIndex: Map<string, ChunkRecord>): ChunkRecord | null {
-  const startChunk = chunkIndex.get(scene.start_chunk_id);
-  if (startChunk) {
-    return startChunk;
+function parseRepetitionCounts(raw: unknown): RepetitionCounts | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const asRecord = raw as Record<string, unknown>;
+  if ("counts" in asRecord && asRecord.counts && typeof asRecord.counts === "object") {
+    return asRecord.counts as RepetitionCounts;
+  }
+  if ("top" in asRecord) {
+    return null;
+  }
+  return raw as RepetitionCounts;
+}
+
+function parseDialogueMetric(raw: unknown): DialogueTic[] | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) {
+    return raw as DialogueTic[];
+  }
+  if (typeof raw === "object" && raw !== null && "tics" in raw) {
+    const tics = (raw as { tics?: DialogueTic[] }).tics;
+    return Array.isArray(tics) ? tics : null;
   }
   return null;
 }
 
-export function runStyleMetrics(db: Database.Database, projectId: string): void {
-  const chunks = gatherProjectChunks(db, projectId);
+export function runStyleMetrics(
+  db: Database.Database,
+  projectId: string,
+  options: StyleRunOptions = {}
+): void {
+  const documents = listDocuments(db, projectId);
   const scenes = listScenesForProject(db, projectId);
-  const chunkIndex = buildChunkIndex(chunks);
+  const targetDocIds = options.documentId ? new Set([options.documentId]) : null;
 
-  clearIssuesByType(db, projectId, "repetition");
-  clearIssuesByType(db, projectId, "tone_drift");
-  clearIssuesByType(db, projectId, "dialogue_tic");
+  const chunksByDoc = new Map<string, ChunkRecord[]>();
+  const scenesByDoc = new Map<string, SceneSummary[]>();
+  for (const scene of scenes) {
+    const list = scenesByDoc.get(scene.document_id) ?? [];
+    list.push(scene);
+    scenesByDoc.set(scene.document_id, list);
+  }
 
-  const repetition = computeRepetitionMetrics(chunks, scenes);
+  const getChunks = (docId: string): ChunkRecord[] => {
+    const existing = chunksByDoc.get(docId);
+    if (existing) return existing;
+    const loaded = listChunksForDocument(db, docId);
+    chunksByDoc.set(docId, loaded);
+    return loaded;
+  };
+
+  const allMetrics = listStyleMetrics(db, { projectId });
+
+  // Repetition (per document counts -> merged project metric)
+  const docCounts = new Map<string, RepetitionCounts>();
+  for (const metric of allMetrics) {
+    if (metric.scope_type !== "document" || metric.metric_name !== "ngram_freq") {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(metric.metric_json);
+      const counts = parseRepetitionCounts(parsed);
+      if (counts) {
+        docCounts.set(metric.scope_id, counts);
+      }
+    } catch {
+      // ignore parse failure
+    }
+  }
+
+  for (const doc of documents) {
+    const shouldRecompute = targetDocIds ? targetDocIds.has(doc.id) : true;
+    if (!shouldRecompute && docCounts.has(doc.id)) {
+      continue;
+    }
+    const docChunks = getChunks(doc.id);
+    const docScenes = scenesByDoc.get(doc.id) ?? [];
+    const counts = computeRepetitionCounts(docChunks, docScenes);
+    docCounts.set(doc.id, counts);
+    replaceStyleMetric(db, {
+      projectId,
+      scopeType: "document",
+      scopeId: doc.id,
+      metricName: "ngram_freq",
+      metricJson: JSON.stringify({ counts })
+    });
+  }
+
+  const mergedCounts = mergeRepetitionCounts(
+    documents.map((doc) => docCounts.get(doc.id) ?? {})
+  );
+  const repetition = buildRepetitionMetricFromCounts(mergedCounts);
   replaceStyleMetric(db, {
     projectId,
     scopeType: "project",
@@ -56,6 +149,7 @@ export function runStyleMetrics(db: Database.Database, projectId: string): void 
     metricJson: JSON.stringify(repetition.metric)
   });
 
+  clearIssuesByType(db, projectId, "repetition");
   for (const issue of repetition.issues) {
     const created = insertIssue(db, {
       projectId,
@@ -72,31 +166,64 @@ export function runStyleMetrics(db: Database.Database, projectId: string): void 
     });
   }
 
-  const toneMetrics = computeToneMetrics(scenes, chunks);
-  for (const tone of toneMetrics) {
+  // Tone (reuse stored vectors, recompute drift)
+  const toneVectors = new Map<string, ToneVector>();
+  for (const metric of allMetrics) {
+    if (metric.scope_type !== "scene" || metric.metric_name !== "tone_vector") {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(metric.metric_json) as { vector?: ToneVector };
+      if (parsed?.vector) {
+        toneVectors.set(metric.scope_id, parsed.vector);
+      }
+    } catch {
+      // ignore parse failure
+    }
+  }
+
+  for (const scene of scenes) {
+    const shouldRecompute = targetDocIds ? targetDocIds.has(scene.document_id) : true;
+    if (shouldRecompute || !toneVectors.has(scene.id)) {
+      const docChunks = getChunks(scene.document_id);
+      toneVectors.set(scene.id, computeToneVector(buildSceneText(scene, docChunks)));
+    }
+  }
+
+  const baselineVectors = scenes
+    .slice(0, 10)
+    .map((scene) => toneVectors.get(scene.id) ?? computeToneVector(""));
+  const baseline = computeToneBaseline(baselineVectors);
+
+  deleteStyleMetricsByName(db, { projectId, scopeType: "scene", metricName: "tone_vector" });
+  clearIssuesByType(db, projectId, "tone_drift");
+
+  for (const scene of scenes) {
+    const vector = toneVectors.get(scene.id) ?? computeToneVector("");
+    const metric = computeToneMetric(scene.id, vector, baseline);
     replaceStyleMetric(db, {
       projectId,
       scopeType: "scene",
-      scopeId: tone.sceneId,
+      scopeId: scene.id,
       metricName: "tone_vector",
-      metricJson: JSON.stringify(tone)
+      metricJson: JSON.stringify(metric)
     });
 
-    if (tone.driftScore >= DRIFT_THRESHOLD) {
-      const scene = scenes.find((s) => s.id === tone.sceneId);
-      const chunk = scene ? firstChunkForScene(scene, chunkIndex) : null;
+    if (metric.driftScore >= DRIFT_THRESHOLD) {
+      const docChunks = getChunks(scene.document_id);
+      const excerptChunk = docChunks.find((chunk) => chunk.id === scene.start_chunk_id);
       const created = insertIssue(db, {
         projectId,
         type: "tone_drift",
         severity: "medium",
         title: "Tone drift detected",
-        description: `Drift score ${tone.driftScore.toFixed(2)} exceeds threshold.`
+        description: `Drift score ${metric.driftScore.toFixed(2)} exceeds threshold.`
       });
-      if (chunk) {
-        const end = Math.min(chunk.text.length, 160);
+      if (excerptChunk) {
+        const end = Math.min(excerptChunk.text.length, 160);
         insertIssueEvidence(db, {
           issueId: created.id,
-          chunkId: chunk.id,
+          chunkId: excerptChunk.id,
           quoteStart: 0,
           quoteEnd: end
         });
@@ -104,10 +231,50 @@ export function runStyleMetrics(db: Database.Database, projectId: string): void 
     }
   }
 
-  const dialogueLines = extractDialogueLines(chunks);
-  const tics = computeDialogueTics(dialogueLines);
+  // Dialogue tics (per document -> merged by speaker)
+  const characterEntities = listEntities(db, projectId, "character");
+  const knownSpeakers: string[] = [];
+  for (const entity of characterEntities) {
+    knownSpeakers.push(entity.display_name, ...listAliases(db, entity.id));
+  }
 
-  for (const tic of tics) {
+  const docTics = new Map<string, DialogueTic[]>();
+  for (const metric of allMetrics) {
+    if (metric.scope_type !== "document" || metric.metric_name !== "dialogue_tics") {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(metric.metric_json);
+      const tics = parseDialogueMetric(parsed);
+      if (tics) {
+        docTics.set(metric.scope_id, tics);
+      }
+    } catch {
+      // ignore parse failure
+    }
+  }
+
+  for (const doc of documents) {
+    const shouldRecompute = targetDocIds ? targetDocIds.has(doc.id) : true;
+    if (!shouldRecompute && docTics.has(doc.id)) {
+      continue;
+    }
+    const docChunks = getChunks(doc.id);
+    const dialogueLines = extractDialogueLines(docChunks, { knownSpeakers });
+    const tics = computeDialogueTics(dialogueLines);
+    docTics.set(doc.id, tics);
+    replaceStyleMetric(db, {
+      projectId,
+      scopeType: "document",
+      scopeId: doc.id,
+      metricName: "dialogue_tics",
+      metricJson: JSON.stringify({ tics })
+    });
+  }
+
+  const mergedTics = mergeDialogueTics(documents.map((doc) => docTics.get(doc.id) ?? []));
+  deleteStyleMetricsByName(db, { projectId, scopeType: "entity", metricName: "dialogue_tics" });
+  for (const tic of mergedTics) {
     const entity = getOrCreateEntityByName(db, { projectId, name: tic.speaker, type: "character" });
     replaceStyleMetric(db, {
       projectId,
@@ -118,7 +285,8 @@ export function runStyleMetrics(db: Database.Database, projectId: string): void 
     });
   }
 
-  const ticIssues = pickDialogueIssues(tics);
+  clearIssuesByType(db, projectId, "dialogue_tic");
+  const ticIssues = pickDialogueIssues(mergedTics);
   for (const tic of ticIssues) {
     const created = insertIssue(db, {
       projectId,

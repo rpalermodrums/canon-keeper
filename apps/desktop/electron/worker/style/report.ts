@@ -19,9 +19,15 @@ function buildExcerpt(text: string, start: number, end: number): string {
 
 export function getStyleReport(db: Database.Database, projectId: string): StyleReport {
   const metrics = listStyleMetrics(db, { projectId });
-  const repetitionMetric = metrics.find((metric) => metric.metric_name === "ngram_freq");
-  const tone = metrics.filter((metric) => metric.metric_name === "tone_vector");
-  const dialogue = metrics.filter((metric) => metric.metric_name === "dialogue_tics");
+  const repetitionMetric = metrics.find(
+    (metric) => metric.metric_name === "ngram_freq" && metric.scope_type === "project"
+  );
+  const tone = metrics.filter(
+    (metric) => metric.metric_name === "tone_vector" && metric.scope_type === "scene"
+  );
+  const dialogue = metrics.filter(
+    (metric) => metric.metric_name === "dialogue_tics" && metric.scope_type === "entity"
+  );
 
   let repetition: unknown | null = null;
   if (repetitionMetric) {

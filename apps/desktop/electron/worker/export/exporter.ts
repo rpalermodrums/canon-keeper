@@ -160,7 +160,9 @@ export function exportProject(
   }
 
   const styleLines: string[] = ["# Style Report", ""]; 
-  const repetitionMetric = styleMetrics.find((metric) => metric.metric_name === "ngram_freq");
+  const repetitionMetric = styleMetrics.find(
+    (metric) => metric.metric_name === "ngram_freq" && metric.scope_type === "project"
+  );
   if (repetitionMetric) {
     const parsed = JSON.parse(repetitionMetric.metric_json) as {
       top?: Array<{

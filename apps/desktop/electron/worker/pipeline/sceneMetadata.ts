@@ -19,6 +19,7 @@ import {
   replaceSceneEntities,
   updateSceneMetadata
 } from "../storage";
+import { extractDialogueLines } from "./style/dialogue";
 
 const FIRST_PERSON = /\b(I|me|my|mine|we|our|us)\b/;
 const SETTING_PHRASE = /\b(in|at|inside|within|outside|on)\s+(the\s+)?([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,6})/i;
@@ -181,6 +182,10 @@ export async function runSceneMetadata(
   const locationEntities = entities.filter((entity) => entity.type === "location");
   const characterMap = buildAliasMap(characterEntities, (id) => listAliases(db, id));
   const locationMap = buildAliasMap(locationEntities, (id) => listAliases(db, id));
+  const knownSpeakers: string[] = [];
+  for (const character of characterEntities) {
+    knownSpeakers.push(character.display_name, ...listAliases(db, character.id));
+  }
 
   const provider = buildProvider(rootPath);
   const providerAvailable = await provider.isAvailable();
@@ -236,6 +241,15 @@ export async function runSceneMetadata(
       }
     }
 
+    const dialogueLines = extractDialogueLines(scopedChunks, { knownSpeakers });
+    const speakerCounts = new Map<string, number>();
+    for (const line of dialogueLines) {
+      if (!line.speaker) continue;
+      const entityId = characterMap.get(normalizeAlias(line.speaker));
+      if (!entityId) continue;
+      speakerCounts.set(entityId, (speakerCounts.get(entityId) ?? 0) + 1);
+    }
+
     const sceneEntities: Array<{ entityId: string; role: "mentioned" | "setting" | "present"; confidence: number }> = [];
     const sceneEntityIds = new Set<string>();
     for (const character of characterEntities) {
@@ -246,6 +260,15 @@ export async function runSceneMetadata(
       }
       if (maxCount > 0) {
         sceneEntityIds.add(character.id);
+        const speakerCount = speakerCounts.get(character.id) ?? 0;
+        if (speakerCount > 0) {
+          sceneEntities.push({
+            entityId: character.id,
+            role: "present",
+            confidence: 0.7
+          });
+          continue;
+        }
         sceneEntities.push({
           entityId: character.id,
           role: maxCount >= 2 ? "present" : "mentioned",

@@ -150,10 +150,11 @@ export async function ingestDocument(
   const scenes = buildScenesFromChunks(args.projectId, document.id, storedChunks);
   replaceScenesForDocument(db, document.id, scenes);
   await runSceneMetadata(db, args.projectId, document.id, args.rootPath);
-  runStyleMetrics(db, args.projectId);
+  runStyleMetrics(db, args.projectId, { documentId: document.id });
+  let extractedEntityIds: string[] = [];
   if (extractionChunks.length > 0) {
     try {
-      await runExtraction(db, {
+      const extractionResult = await runExtraction(db, {
         projectId: args.projectId,
         rootPath: args.rootPath,
         chunks: extractionChunks.map((chunk) => ({
@@ -162,6 +163,7 @@ export async function ingestDocument(
           text: chunk.text
         }))
       });
+      extractedEntityIds = extractionResult.touchedEntityIds;
     } catch (error) {
       logEvent(db, {
         projectId: args.projectId,
@@ -174,7 +176,9 @@ export async function ingestDocument(
       });
     }
   }
-  runContinuityChecks(db, args.projectId);
+  if (extractedEntityIds.length > 0) {
+    runContinuityChecks(db, args.projectId, { entityIds: extractedEntityIds });
+  }
 
   if (prefix === 0 && suffix === 0 && existingChunks.length > 0) {
     logEvent(db, {

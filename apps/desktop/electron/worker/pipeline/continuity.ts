@@ -1,5 +1,13 @@
 import type Database from "better-sqlite3";
-import { clearIssuesByType, insertIssue, insertIssueEvidence, listEntities, listClaimsForEntity, listEvidenceForClaim } from "../storage";
+import {
+  clearIssuesByType,
+  deleteIssuesByTypeAndChunkIds,
+  insertIssue,
+  insertIssueEvidence,
+  listEntities,
+  listClaimsForEntity,
+  listEvidenceForClaim
+} from "../storage";
 
 function normalizeValue(valueJson: string): string {
   try {
@@ -12,10 +20,36 @@ function normalizeValue(valueJson: string): string {
   }
 }
 
-export function runContinuityChecks(db: Database.Database, projectId: string): void {
-  clearIssuesByType(db, projectId, "continuity");
+function listEvidenceChunkIds(db: Database.Database, entityIds: string[]): string[] {
+  if (entityIds.length === 0) {
+    return [];
+  }
+  const placeholders = entityIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT ce.chunk_id as chunk_id
+       FROM claim_evidence ce
+       JOIN claim c ON c.id = ce.claim_id
+       WHERE c.entity_id IN (${placeholders})`
+    )
+    .all(...entityIds) as Array<{ chunk_id: string }>;
+  return rows.map((row) => row.chunk_id);
+}
 
-  const entities = listEntities(db, projectId);
+export function runContinuityChecks(
+  db: Database.Database,
+  projectId: string,
+  options?: { entityIds?: string[] }
+): void {
+  const entityIds = options?.entityIds ?? [];
+  if (entityIds.length > 0) {
+    const chunkIds = listEvidenceChunkIds(db, entityIds);
+    deleteIssuesByTypeAndChunkIds(db, projectId, "continuity", chunkIds);
+  } else {
+    clearIssuesByType(db, projectId, "continuity");
+  }
+
+  const entities = entityIds.length > 0 ? listEntities(db, projectId).filter((entity) => entityIds.includes(entity.id)) : listEntities(db, projectId);
   for (const entity of entities) {
     const claims = listClaimsForEntity(db, entity.id).filter((claim) =>
       ["inferred", "confirmed"].includes(claim.status)

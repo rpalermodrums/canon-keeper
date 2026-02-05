@@ -40,14 +40,17 @@ export {
 } from "./entityRepo";
 export { listClaimsForEntity, insertClaim, supersedeClaims, listClaimsByField } from "./claimRepo";
 export { insertClaimEvidence, listEvidenceForClaim } from "./claimEvidenceRepo";
-export { replaceStyleMetric, listStyleMetrics } from "./styleRepo";
+export { replaceStyleMetric, listStyleMetrics, deleteStyleMetricsByName } from "./styleRepo";
 export {
   clearIssuesByType,
   insertIssue,
   insertIssueEvidence,
   listIssues,
   listIssuesWithEvidence,
-  dismissIssue
+  dismissIssue,
+  deleteIssuesByIds,
+  deleteIssuesByTypeAndDocument,
+  deleteIssuesByTypeAndChunkIds
 } from "./issueRepo";
 export { type StoragePaths, getStoragePaths, ensureStorageDirs } from "./paths";
 export { runMigrations } from "./migrations";

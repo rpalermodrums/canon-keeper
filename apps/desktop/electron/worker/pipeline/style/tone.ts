@@ -39,7 +39,7 @@ function buildSceneText(scene: SceneSummary, chunks: ChunkRecord[]): string {
     .join("\n");
 }
 
-function computeToneVector(text: string): ToneVector {
+export function computeToneVector(text: string): ToneVector {
   const sentences = sentenceSplit(text);
   const lengths = sentences.map((sentence) => sentence.split(" ").length);
   const mean = lengths.reduce((sum, len) => sum + len, 0) / Math.max(1, lengths.length);
@@ -83,6 +83,70 @@ function stats(values: number[]): { mean: number; std: number } {
   return { mean, std: Math.sqrt(variance) || 1 };
 }
 
+export type ToneBaseline = Record<keyof ToneVector, { mean: number; std: number }>;
+
+export function computeToneBaseline(vectors: ToneVector[]): ToneBaseline {
+  const features: Array<keyof ToneVector> = [
+    "sentenceLengthMean",
+    "sentenceLengthVar",
+    "dialogueRatio",
+    "punctuationDensity",
+    "sentimentScore",
+    "contractionRatio"
+  ];
+
+  const baseline: ToneBaseline = {
+    sentenceLengthMean: { mean: 0, std: 1 },
+    sentenceLengthVar: { mean: 0, std: 1 },
+    dialogueRatio: { mean: 0, std: 1 },
+    punctuationDensity: { mean: 0, std: 1 },
+    sentimentScore: { mean: 0, std: 1 },
+    contractionRatio: { mean: 0, std: 1 }
+  };
+
+  for (const feature of features) {
+    const values = vectors.map((vector) => vector[feature]);
+    baseline[feature] = stats(values);
+  }
+
+  return baseline;
+}
+
+export function computeToneMetric(sceneId: string, vector: ToneVector, baseline: ToneBaseline): ToneMetric {
+  const features: Array<keyof ToneVector> = [
+    "sentenceLengthMean",
+    "sentenceLengthVar",
+    "dialogueRatio",
+    "punctuationDensity",
+    "sentimentScore",
+    "contractionRatio"
+  ];
+
+  let sumSquares = 0;
+  const zscores: Record<keyof ToneVector, number> = {
+    sentenceLengthMean: 0,
+    sentenceLengthVar: 0,
+    dialogueRatio: 0,
+    punctuationDensity: 0,
+    sentimentScore: 0,
+    contractionRatio: 0
+  };
+
+  for (const feature of features) {
+    const statsEntry = baseline[feature] ?? { mean: 0, std: 1 };
+    const z = (vector[feature] - statsEntry.mean) / statsEntry.std;
+    zscores[feature] = z;
+    sumSquares += z * z;
+  }
+
+  return {
+    sceneId,
+    vector,
+    driftScore: Math.sqrt(sumSquares),
+    zscores
+  };
+}
+
 export function computeToneMetrics(
   scenes: SceneSummary[],
   chunks: ChunkRecord[],
@@ -94,44 +158,7 @@ export function computeToneMetrics(
   }));
 
   const baselineVectors = vectors.slice(0, baselineCount).map((entry) => entry.vector);
-  const features: Array<keyof ToneVector> = [
-    "sentenceLengthMean",
-    "sentenceLengthVar",
-    "dialogueRatio",
-    "punctuationDensity",
-    "sentimentScore",
-    "contractionRatio"
-  ];
+  const baseline = computeToneBaseline(baselineVectors);
 
-  const statsMap = new Map<keyof ToneVector, { mean: number; std: number }>();
-  for (const feature of features) {
-    const values = baselineVectors.map((vector) => vector[feature]);
-    statsMap.set(feature, stats(values));
-  }
-
-  return vectors.map((entry) => {
-    let sumSquares = 0;
-    const zscores: Record<keyof ToneVector, number> = {
-      sentenceLengthMean: 0,
-      sentenceLengthVar: 0,
-      dialogueRatio: 0,
-      punctuationDensity: 0,
-      sentimentScore: 0,
-      contractionRatio: 0
-    };
-
-    for (const feature of features) {
-      const statsEntry = statsMap.get(feature) ?? { mean: 0, std: 1 };
-      const z = (entry.vector[feature] - statsEntry.mean) / statsEntry.std;
-      zscores[feature] = z;
-      sumSquares += z * z;
-    }
-
-    return {
-      sceneId: entry.sceneId,
-      vector: entry.vector,
-      driftScore: Math.sqrt(sumSquares),
-      zscores
-    };
-  });
+  return vectors.map((entry) => computeToneMetric(entry.sceneId, entry.vector, baseline));
 }

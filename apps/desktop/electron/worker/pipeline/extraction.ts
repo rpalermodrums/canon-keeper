@@ -67,7 +67,8 @@ function extractEyeColorPhrase(text: string): string | null {
 async function runDeterministicExtraction(
   db: Database.Database,
   args: { projectId: string; chunks: Array<{ id: string; ordinal: number; text: string }> }
-): Promise<void> {
+): Promise<Set<string>> {
+  const touched = new Set<string>();
   let lastName: string | null = null;
   const possessiveRegex = /([A-Z][a-z]+)'s eyes were ([^.\n]+)/g;
   const pronounRegex = /(his|her) eyes were ([^.\n]+)/gi;
@@ -97,6 +98,7 @@ async function runDeterministicExtraction(
         status: "inferred",
         confidence: 0.6
       });
+      touched.add(entity.id);
       insertClaimEvidence(db, {
         claimId: claim.id,
         chunkId: chunk.id,
@@ -128,6 +130,7 @@ async function runDeterministicExtraction(
         status: "inferred",
         confidence: 0.5
       });
+      touched.add(entity.id);
       insertClaimEvidence(db, {
         claimId: claim.id,
         chunkId: chunk.id,
@@ -137,17 +140,18 @@ async function runDeterministicExtraction(
     }
     pronounRegex.lastIndex = 0;
   }
+  return touched;
 }
 
 export async function runExtraction(
   db: Database.Database,
   args: { projectId: string; rootPath: string; chunks: Array<{ id: string; ordinal: number; text: string }> }
-): Promise<void> {
-  await runDeterministicExtraction(db, { projectId: args.projectId, chunks: args.chunks });
+): Promise<{ touchedEntityIds: string[] }> {
+  const touched = await runDeterministicExtraction(db, { projectId: args.projectId, chunks: args.chunks });
 
   const provider = buildProvider(args.rootPath);
   if (!(await provider.isAvailable())) {
-    return;
+    return { touchedEntityIds: Array.from(touched) };
   }
 
   logEvent(db, {
@@ -197,6 +201,7 @@ export async function runExtraction(
     }
 
     entityMap.set(extracted.tempId, entity.id);
+    touched.add(entity.id);
   }
 
   for (const claim of completion.json.claims ?? []) {
@@ -237,6 +242,7 @@ export async function runExtraction(
       status: "inferred",
       confidence: claim.confidence
     });
+    touched.add(entityId);
 
     for (const evidence of mappedEvidence) {
       insertClaimEvidence(db, {
@@ -251,4 +257,5 @@ export async function runExtraction(
       continue;
     }
   }
+  return { touchedEntityIds: Array.from(touched) };
 }
