@@ -6,6 +6,7 @@ import {
   createOrOpenProject,
   getWorkerStatus,
   getEntity,
+  getScene,
   getStyleReport,
   listEntities,
   listIssues,
@@ -19,6 +20,7 @@ import {
   type EntitySummary,
   type IssueSummary,
   type ProjectSummary,
+  type SceneDetail,
   type SceneSummary,
   type SearchQueryResponse,
   type StyleReport,
@@ -36,6 +38,8 @@ export function App(): JSX.Element {
   const [questionText, setQuestionText] = useState("");
   const [askResult, setAskResult] = useState<AskResponse | null>(null);
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
+  const [selectedSceneId, setSelectedSceneId] = useState("");
+  const [sceneDetail, setSceneDetail] = useState<SceneDetail | null>(null);
   const [issues, setIssues] = useState<IssueSummary[]>([]);
   const [styleReport, setStyleReport] = useState<StyleReport | null>(null);
   const [styleIssues, setStyleIssues] = useState<IssueSummary[]>([]);
@@ -133,6 +137,21 @@ export function App(): JSX.Element {
       setScenes(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load scenes");
+    }
+  };
+
+  const handleSelectScene = async (sceneId: string) => {
+    setSelectedSceneId(sceneId);
+    if (!sceneId) {
+      setSceneDetail(null);
+      return;
+    }
+    setError(null);
+    try {
+      const detail = await getScene(sceneId);
+      setSceneDetail(detail);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load scene detail");
     }
   };
 
@@ -366,6 +385,23 @@ export function App(): JSX.Element {
         <button onClick={refreshScenes} disabled={busy}>
           Refresh Scenes
         </button>
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: "block", marginBottom: 8 }}>
+            Select scene
+            <select
+              value={selectedSceneId}
+              onChange={(event) => void handleSelectScene(event.target.value)}
+              style={{ display: "block", width: "100%", marginTop: 4 }}
+            >
+              <option value="">--</option>
+              {scenes.map((scene) => (
+                <option key={scene.id} value={scene.id}>
+                  Scene {scene.ordinal}: {scene.title ?? "Untitled"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {scenes.length === 0 ? (
           <p>No scenes available.</p>
         ) : (
@@ -394,6 +430,27 @@ export function App(): JSX.Element {
             </tbody>
           </table>
         )}
+        {sceneDetail ? (
+          <div style={{ marginTop: 12 }}>
+            <h3>Scene Detail</h3>
+            <p>
+              Scene {sceneDetail.scene.ordinal}: {sceneDetail.scene.title ?? "Untitled"}
+            </p>
+            <p>Evidence: {sceneDetail.evidence.length}</p>
+            {sceneDetail.evidence.length > 0 ? (
+              <ul>
+                {sceneDetail.evidence.map((evidence, index) => (
+                  <li key={`${sceneDetail.scene.id}-e-${index}`}>
+                    {evidence.documentPath ?? "unknown"} · chunk {evidence.chunkOrdinal ?? "?"}
+                    <div style={{ fontStyle: "italic" }}>{evidence.excerpt}</div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No scene evidence yet.</p>
+            )}
+          </div>
+        ) : null}
       </section>
 
       <section style={{ marginBottom: 24 }}>
