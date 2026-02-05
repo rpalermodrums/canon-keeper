@@ -147,7 +147,7 @@ export function runSceneMetadata(db: Database.Database, projectId: string, docum
         const locEvidence = findAliasEvidence(scopedChunks, alias);
         if (!locEvidence) continue;
         settingEntityId = location.id;
-        settingText = null;
+        settingText = alias;
         settingConfidence = 0.7;
         evidence.push(locEvidence);
         matchedLocation = true;
