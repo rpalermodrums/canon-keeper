@@ -22,6 +22,16 @@ export type SceneSummary = SceneInsert & {
   setting_text: string | null;
 };
 
+export type SceneMetadataUpdate = {
+  pov_mode: string;
+  pov_entity_id: string | null;
+  pov_confidence: number;
+  setting_entity_id: string | null;
+  setting_text: string | null;
+  setting_confidence: number;
+  time_context_text: string | null;
+};
+
 export function getSceneById(db: Database.Database, sceneId: string): SceneSummary | null {
   const row = db
     .prepare(
@@ -111,4 +121,44 @@ export function listScenesForProject(db: Database.Database, projectId: string): 
       "SELECT s.id, s.project_id, s.document_id, s.ordinal, s.start_chunk_id, s.end_chunk_id, s.start_char, s.end_char, s.title, m.pov_mode, m.pov_entity_id, m.setting_entity_id, m.setting_text FROM scene s LEFT JOIN scene_metadata m ON m.scene_id = s.id WHERE s.project_id = ? ORDER BY s.document_id, s.ordinal"
     )
     .all(projectId) as SceneSummary[];
+}
+
+export function updateSceneMetadata(
+  db: Database.Database,
+  sceneId: string,
+  update: SceneMetadataUpdate
+): void {
+  db.prepare(
+    "UPDATE scene_metadata SET pov_mode = ?, pov_entity_id = ?, pov_confidence = ?, setting_entity_id = ?, setting_text = ?, setting_confidence = ?, time_context_text = ?, updated_at = ? WHERE scene_id = ?"
+  ).run(
+    update.pov_mode,
+    update.pov_entity_id,
+    update.pov_confidence,
+    update.setting_entity_id,
+    update.setting_text,
+    update.setting_confidence,
+    update.time_context_text,
+    Date.now(),
+    sceneId
+  );
+}
+
+export function replaceSceneEntities(
+  db: Database.Database,
+  sceneId: string,
+  entities: Array<{ entityId: string; role: string; confidence: number }>
+): void {
+  const deleteStmt = db.prepare("DELETE FROM scene_entity WHERE scene_id = ?");
+  const insertStmt = db.prepare(
+    "INSERT INTO scene_entity (id, scene_id, entity_id, role, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  const now = Date.now();
+
+  const tx = db.transaction(() => {
+    deleteStmt.run(sceneId);
+    for (const entity of entities) {
+      insertStmt.run(crypto.randomUUID(), sceneId, entity.entityId, entity.role, entity.confidence, now);
+    }
+  });
+  tx();
 }

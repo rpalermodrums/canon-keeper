@@ -42,3 +42,7 @@ export function deleteSceneEvidenceForDocument(db: Database.Database, documentId
     "DELETE FROM scene_evidence WHERE scene_id IN (SELECT id FROM scene WHERE document_id = ?)"
   ).run(documentId);
 }
+
+export function deleteSceneEvidenceForScene(db: Database.Database, sceneId: string): void {
+  db.prepare("DELETE FROM scene_evidence WHERE scene_id = ?").run(sceneId);
+}

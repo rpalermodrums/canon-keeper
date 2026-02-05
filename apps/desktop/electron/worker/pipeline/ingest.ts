@@ -18,6 +18,7 @@ import {
   updateChunk
 } from "../storage";
 import { buildScenesFromChunks } from "./scenes";
+import { runSceneMetadata } from "./sceneMetadata";
 import { runStyleMetrics } from "./style/styleRunner";
 import { runExtraction } from "./extraction";
 import { runContinuityChecks } from "./continuity";
@@ -138,6 +139,7 @@ export async function ingestDocument(
   const storedChunks = listChunksForDocument(db, document.id);
   const scenes = buildScenesFromChunks(args.projectId, document.id, storedChunks);
   replaceScenesForDocument(db, document.id, scenes);
+  runSceneMetadata(db, args.projectId, document.id);
   runStyleMetrics(db, args.projectId);
   try {
     await runExtraction(db, {

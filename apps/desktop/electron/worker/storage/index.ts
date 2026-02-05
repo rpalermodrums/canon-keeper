@@ -16,8 +16,19 @@ export {
   getChunkById
 } from "./chunkRepo";
 export { logEvent } from "./eventLogRepo";
-export { replaceScenesForDocument, listScenesForProject, getSceneById } from "./sceneRepo";
-export { insertSceneEvidence, listSceneEvidence, deleteSceneEvidenceForDocument } from "./sceneEvidenceRepo";
+export {
+  replaceScenesForDocument,
+  listScenesForProject,
+  getSceneById,
+  updateSceneMetadata,
+  replaceSceneEntities
+} from "./sceneRepo";
+export {
+  insertSceneEvidence,
+  listSceneEvidence,
+  deleteSceneEvidenceForDocument,
+  deleteSceneEvidenceForScene
+} from "./sceneEvidenceRepo";
 export {
   listEntities,
   getEntityById,
