@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonkeeper://schemas/extraction.schema.json",
+  "title": "CanonKeeper Extraction Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entities", "claims", "suggestedMerges"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "entities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/extractedEntity" }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/extractedClaim" }
+    },
+    "suggestedMerges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/suggestedMerge" }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "entityType": {
+      "type": "string",
+      "enum": ["character", "location", "org", "artifact", "term", "rule"]
+    },
+    "jsonValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunkOrdinal", "quote"],
+      "properties": {
+        "chunkOrdinal": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Ordinal index of the chunk within the provided input chunk list."
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 360,
+          "description": "Exact substring copied from the referenced chunk text. Must appear verbatim."
+        }
+      }
+    },
+    "extractedEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tempId", "type", "displayName", "aliases"],
+      "properties": {
+        "tempId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Temporary identifier scoped to this extraction response (e.g., e_1)."
+        },
+        "type": { "$ref": "#/$defs/entityType" },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400,
+          "description": "Optional short notes, must be grounded in text; do not invent."
+        }
+      }
+    },
+    "extractedClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityTempId", "field", "value", "confidence", "evidence"],
+      "properties": {
+        "entityTempId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "tempId of an entity in this response."
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Claim field name (e.g., 'eye_color', 'age', 'relationship', 'rule')."
+        },
+        "value": {
+          "$ref": "#/$defs/jsonValue",
+          "description": "Claim value. Must be supported by evidence. Use primitive or object as appropriate."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceRef" },
+          "minItems": 1,
+          "description": "At least one exact quote supporting the claim."
+        }
+      }
+    },
+    "suggestedMerge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["a", "b", "reason", "confidence"],
+      "properties": {
+        "a": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Entity reference: either a tempId from this response or an existing entity identifier if provided in prompt."
+        },
+        "b": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

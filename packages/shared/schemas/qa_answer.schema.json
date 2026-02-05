@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonkeeper://schemas/qa_answer.schema.json",
+  "title": "CanonKeeper Q&A Answer Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "answerType", "answer", "confidence", "citations"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "answerType": {
+      "type": "string",
+      "enum": ["cited", "not_found"],
+      "description": "Use 'not_found' if the provided context does not contain the answer."
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "citations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/citationRef" },
+      "minItems": 0,
+      "description": "For answerType='cited', must include at least one citation with exact quotes."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "answerType": { "const": "cited" } }, "required": ["answerType"] },
+      "then": { "properties": { "citations": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "answerType": { "const": "not_found" } }, "required": ["answerType"] },
+      "then": { "properties": { "citations": { "maxItems": 0 }, "confidence": { "maximum": 0.4 } } }
+    }
+  ],
+  "$defs": {
+    "citationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunkOrdinal", "quote"],
+      "properties": {
+        "chunkOrdinal": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Ordinal index of the chunk within the provided retrieved-chunks list."
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 360,
+          "description": "Exact substring copied from the referenced chunk text. Must appear verbatim."
+        }
+      }
+    }
+  }
+}

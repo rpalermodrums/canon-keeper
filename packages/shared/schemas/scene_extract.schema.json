@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canonkeeper://schemas/scene_extract.schema.json",
+  "title": "CanonKeeper Scene Metadata Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "povMode",
+    "povName",
+    "povConfidence",
+    "settingName",
+    "settingText",
+    "settingConfidence",
+    "timeContextText",
+    "evidence"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "povMode": {
+      "type": "string",
+      "enum": ["first", "third_limited", "omniscient", "epistolary", "unknown"]
+    },
+    "povName": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "Name as it appears in text (or best-matching known character name). Null if unknown."
+    },
+    "povConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "settingName": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "Location name if identifiable and matches known locations; else null."
+    },
+    "settingText": {
+      "type": ["string", "null"],
+      "maxLength": 240,
+      "description": "Short freeform setting phrase (e.g., 'service corridor under the opera house'). Null if unknown."
+    },
+    "settingConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "timeContextText": {
+      "type": ["string", "null"],
+      "maxLength": 160,
+      "description": "Optional time context like 'the next morning', 'two weeks earlier'. Null if unknown."
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidenceRef" },
+      "minItems": 0,
+      "description": "Quotes supporting POV and/or setting. Required when povMode is not 'unknown' OR when setting is confident."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "povMode": { "not": { "const": "unknown" } } },
+        "required": ["povMode"]
+      },
+      "then": {
+        "properties": {
+          "evidence": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "settingConfidence": { "minimum": 0.6 } },
+        "required": ["settingConfidence"]
+      },
+      "then": {
+        "properties": {
+          "evidence": { "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chunkOrdinal", "quote"],
+      "properties": {
+        "chunkOrdinal": { "type": "integer", "minimum": 0 },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 360,
+          "description": "Exact substring copied from the referenced chunk text. Must appear verbatim."
+        }
+      }
+    }
+  }
+}
