@@ -26,9 +26,34 @@ export function searchChunks(
   limit = 8,
   projectId?: string
 ): SearchResult[] {
-  if (!query.trim()) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
     return [];
   }
+
+  const sanitizedQuery = sanitizeQuery(trimmedQuery);
+  const preferSanitized = /["']/.test(trimmedQuery);
+
+  const attempts: string[] = [];
+  const pushAttempt = (value: string): void => {
+    if (!value || attempts.includes(value)) {
+      return;
+    }
+    attempts.push(value);
+  };
+
+  if (preferSanitized) {
+    pushAttempt(sanitizedQuery);
+    pushAttempt(trimmedQuery);
+  } else {
+    pushAttempt(trimmedQuery);
+    pushAttempt(sanitizedQuery);
+  }
+
+  if (attempts.length === 0) {
+    return [];
+  }
+
   const stmt = db.prepare(
     `
     SELECT
@@ -48,39 +73,29 @@ export function searchChunks(
   `
   );
 
-  try {
-    return stmt.all(query, limit) as SearchResult[];
-  } catch (error) {
-    if (projectId) {
-      logEvent(db, {
-        projectId,
-        level: "warn",
-        eventType: "fts_query_failed",
-        payload: {
-          query,
-          message: error instanceof Error ? error.message : "Unknown error"
-        }
+  const failures: Array<{ query: string; message: string }> = [];
+
+  for (const candidate of attempts) {
+    try {
+      return stmt.all(candidate, limit) as SearchResult[];
+    } catch (error) {
+      failures.push({
+        query: candidate,
+        message: error instanceof Error ? error.message : "Unknown error"
       });
     }
-    const fallback = sanitizeQuery(query);
-    if (!fallback) {
-      return [];
-    }
-    try {
-      return stmt.all(fallback, limit) as SearchResult[];
-    } catch (fallbackError) {
-      if (projectId) {
-        logEvent(db, {
-          projectId,
-          level: "warn",
-          eventType: "fts_query_failed",
-          payload: {
-            query: fallback,
-            message: fallbackError instanceof Error ? fallbackError.message : "Unknown error"
-          }
-        });
-      }
-      return [];
-    }
   }
+
+  if (projectId) {
+    logEvent(db, {
+      projectId,
+      level: "warn",
+      eventType: "fts_query_failed",
+      payload: {
+        attempts: failures
+      }
+    });
+  }
+
+  return [];
 }

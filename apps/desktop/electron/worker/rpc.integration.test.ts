@@ -335,6 +335,7 @@ describe("worker RPC integration", () => {
       const history = await worker.request<ProjectHistory>("project.getHistory");
       expect(history.snapshots.length).toBeGreaterThan(0);
       expect(history.events.length).toBeGreaterThan(0);
+      expect(history.events.some((event) => event.event_type === "fts_query_failed")).toBe(false);
     } catch (error) {
       const detail = worker.getStderrLog();
       if (detail) {
