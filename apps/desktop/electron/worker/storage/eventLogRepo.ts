@@ -24,3 +24,29 @@ export function logEvent(
     JSON.stringify(args.payload)
   );
 }
+
+export function listEvents(
+  db: Database.Database,
+  projectId: string,
+  limit = 100
+): Array<{
+  id: string;
+  project_id: string;
+  ts: number;
+  level: LogLevel;
+  event_type: string;
+  payload_json: string;
+}> {
+  return db
+    .prepare(
+      "SELECT id, project_id, ts, level, event_type, payload_json FROM event_log WHERE project_id = ? ORDER BY ts DESC LIMIT ?"
+    )
+    .all(projectId, limit) as Array<{
+    id: string;
+    project_id: string;
+    ts: number;
+    level: LogLevel;
+    event_type: string;
+    payload_json: string;
+  }>;
+}

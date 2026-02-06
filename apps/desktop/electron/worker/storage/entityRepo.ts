@@ -82,10 +82,14 @@ export function createEntity(
 }
 
 export function addAlias(db: Database.Database, entityId: string, alias: string): void {
+  const normalized = normalizeAlias(alias);
+  if (!normalized) {
+    return;
+  }
   const now = Date.now();
   db.prepare(
-    "INSERT INTO entity_alias (id, entity_id, alias, alias_norm, created_at) VALUES (?, ?, ?, ?, ?)"
-  ).run(crypto.randomUUID(), entityId, alias, normalizeAlias(alias), now);
+    "INSERT OR IGNORE INTO entity_alias (id, entity_id, alias, alias_norm, created_at) VALUES (?, ?, ?, ?, ?)"
+  ).run(crypto.randomUUID(), entityId, alias, normalized, now);
 }
 
 export function listAliases(db: Database.Database, entityId: string): string[] {
@@ -108,4 +112,16 @@ export function getOrCreateEntityByName(
     type: args.type ?? "character",
     displayName: args.name
   });
+}
+
+export function deleteEntityIfNoClaims(db: Database.Database, entityId: string): boolean {
+  const claims = db
+    .prepare("SELECT COUNT(*) as count FROM claim WHERE entity_id = ?")
+    .get(entityId) as { count: number } | undefined;
+  if ((claims?.count ?? 0) > 0) {
+    return false;
+  }
+  db.prepare("DELETE FROM entity_alias WHERE entity_id = ?").run(entityId);
+  const result = db.prepare("DELETE FROM entity WHERE id = ?").run(entityId);
+  return result.changes > 0;
 }

@@ -28,7 +28,7 @@ export function runStyleStage(ctx: PipelineContext): { ok: boolean; skipped?: bo
   });
 
   try {
-    runStyleMetrics(ctx.db, ctx.projectId, { documentId: ctx.documentId });
+    runStyleMetrics(ctx.db, ctx.projectId, { documentId: ctx.documentId, rootPath: ctx.rootPath });
     upsertProcessingState(ctx.db, {
       documentId: ctx.documentId,
       snapshotId: ctx.snapshotId,

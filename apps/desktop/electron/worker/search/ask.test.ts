@@ -38,4 +38,30 @@ describe("askQuestion", () => {
     expect(result.answerType).toBe("snippets");
     expect(result.snippets?.length ?? 0).toBeGreaterThan(0);
   });
+
+  it("returns not_found when no snippets match", async () => {
+    const { rootPath, db, projectId } = setupDb();
+    const doc = createDocument(db, projectId, path.join(rootPath, "draft.md"), "md");
+    const text = "Mira lifted the brass compass.";
+    insertChunks(db, doc.id, [
+      {
+        document_id: doc.id,
+        ordinal: 0,
+        text,
+        text_hash: hashText(text),
+        start_char: 0,
+        end_char: text.length
+      }
+    ]);
+
+    const result = await askQuestion(db, {
+      projectId,
+      rootPath,
+      question: "submarine"
+    });
+
+    expect(result.answerType).toBe("not_found");
+    expect(result.citations).toEqual([]);
+    expect(result.snippets).toBeUndefined();
+  });
 });

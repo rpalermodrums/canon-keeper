@@ -27,6 +27,8 @@ export function runContinuityStage(
   try {
     if (ctx.entityIds.length > 0) {
       runContinuityChecks(ctx.db, ctx.projectId, { entityIds: ctx.entityIds });
+    } else {
+      runContinuityChecks(ctx.db, ctx.projectId);
     }
     upsertProcessingState(ctx.db, {
       documentId: ctx.documentId,

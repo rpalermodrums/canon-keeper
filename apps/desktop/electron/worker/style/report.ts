@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { getChunkById, getDocumentById, listStyleMetrics } from "../storage";
+import { listStyleMetrics } from "../storage";
+import { createEvidenceMapper } from "../utils/evidence";
 
 export type StyleReport = {
   repetition: unknown | null;
@@ -7,18 +8,9 @@ export type StyleReport = {
   dialogueTics: unknown[];
 };
 
-function buildExcerpt(text: string, start: number, end: number): string {
-  const context = 60;
-  const prefixStart = Math.max(0, start - context);
-  const suffixEnd = Math.min(text.length, end + context);
-  const before = text.slice(prefixStart, start);
-  const highlight = text.slice(start, end);
-  const after = text.slice(end, suffixEnd);
-  return `${prefixStart > 0 ? "…" : ""}${before}[${highlight}]${after}${suffixEnd < text.length ? "…" : ""}`;
-}
-
 export function getStyleReport(db: Database.Database, projectId: string): StyleReport {
   const metrics = listStyleMetrics(db, { projectId });
+  const mapEvidence = createEvidenceMapper(db);
   const repetitionMetric = metrics.find(
     (metric) => metric.metric_name === "ngram_freq" && metric.scope_type === "project"
   );
@@ -44,14 +36,18 @@ export function getStyleReport(db: Database.Database, projectId: string): StyleR
       parsed.top = parsed.top.map((entry) => ({
         ...entry,
         examples: (entry.examples ?? []).map((example) => {
-          const chunk = getChunkById(db, example.chunkId);
-          const doc = chunk ? getDocumentById(db, chunk.document_id) : null;
-          const excerpt = chunk ? buildExcerpt(chunk.text, example.quoteStart, example.quoteEnd) : "";
+          const mapped = mapEvidence({
+            chunkId: example.chunkId,
+            quoteStart: example.quoteStart,
+            quoteEnd: example.quoteEnd
+          });
           return {
             ...example,
-            documentPath: doc?.path ?? null,
-            chunkOrdinal: chunk?.ordinal ?? null,
-            excerpt
+            documentPath: mapped.documentPath,
+            chunkOrdinal: mapped.chunkOrdinal,
+            excerpt: mapped.excerpt,
+            lineStart: mapped.lineStart,
+            lineEnd: mapped.lineEnd
           };
         })
       }));

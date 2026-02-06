@@ -3,7 +3,6 @@ import path from "node:path";
 import type Database from "better-sqlite3";
 import {
   getChunkById,
-  getDocumentById,
   getEntityById,
   getProjectById,
   listClaimsForEntity,
@@ -14,6 +13,7 @@ import {
   listScenesForProject,
   listStyleMetrics
 } from "../storage";
+import { createEvidenceMapper } from "../utils/evidence";
 
 type Citation = { chunkId: string; quoteStart: number; quoteEnd: number };
 
@@ -29,15 +29,26 @@ function buildCitationFootnotes(
   db: Database.Database,
   citations: Citation[]
 ): { footnotes: string; refs: string[] } {
+  const mapEvidence = createEvidenceMapper(db);
   const refs: string[] = [];
   const lines: string[] = [];
   citations.forEach((citation, idx) => {
+    const mapped = mapEvidence({
+      chunkId: citation.chunkId,
+      quoteStart: citation.quoteStart,
+      quoteEnd: citation.quoteEnd
+    });
     const chunk = getChunkById(db, citation.chunkId);
-    const doc = chunk ? getDocumentById(db, chunk.document_id) : null;
     const quote = chunk ? chunk.text.slice(citation.quoteStart, citation.quoteEnd) : "";
+    const lineSuffix =
+      mapped.lineStart !== null
+        ? `, line ${mapped.lineStart}${mapped.lineEnd && mapped.lineEnd !== mapped.lineStart ? `-${mapped.lineEnd}` : ""}`
+        : "";
     const label = formatCitation(idx + 1);
     refs.push(label);
-    lines.push(`${label}: ${doc?.path ?? "unknown"} (chunk ${chunk?.ordinal ?? "?"}) — "${quote}"`);
+    lines.push(
+      `${label}: ${mapped.documentPath ?? "unknown"} (chunk ${mapped.chunkOrdinal ?? "?"}${lineSuffix}) — "${quote}"`
+    );
   });
 
   return { footnotes: lines.join("\n"), refs };
@@ -54,22 +65,11 @@ function listSceneEntities(db: Database.Database, sceneId: string): string[] {
 }
 
 function buildSceneEvidence(db: Database.Database, sceneId: string): Citation[] {
-  const evidence = listSceneEvidence(db, sceneId).map((row) => ({
+  return listSceneEvidence(db, sceneId).map((row) => ({
     chunkId: row.chunk_id,
     quoteStart: row.quote_start,
     quoteEnd: row.quote_end
   }));
-  if (evidence.length > 0) return evidence;
-
-  const chunkRow = db
-    .prepare("SELECT start_chunk_id FROM scene WHERE id = ?")
-    .get(sceneId) as { start_chunk_id: string } | undefined;
-  if (!chunkRow) return [];
-  const chunk = getChunkById(db, chunkRow.start_chunk_id);
-  if (!chunk) return [];
-  const end = Math.min(chunk.text.length, 120);
-  if (end === 0) return [];
-  return [{ chunkId: chunk.id, quoteStart: 0, quoteEnd: end }];
 }
 
 function listIssuesByType(db: Database.Database, projectId: string, type: string): Array<{
@@ -145,9 +145,10 @@ export function exportProject(
     const characters = listSceneEntities(db, scene.id);
     const evidence = buildSceneEvidence(db, scene.id);
     const { footnotes, refs } = buildCitationFootnotes(db, evidence);
+    const citationState = evidence.length === 0 ? " [uncited]" : "";
 
     sceneLines.push(
-      `- Scene ${scene.ordinal}: ${scene.title ?? "Untitled"} (POV: ${povLabel}, Setting: ${settingLabel}) ${refs.join(" ")}`.trim()
+      `- Scene ${scene.ordinal}: ${scene.title ?? "Untitled"} (POV: ${povLabel}, Setting: ${settingLabel})${citationState} ${refs.join(" ")}`.trim()
     );
     sceneLines.push(`Characters: ${characters.length > 0 ? characters.join(", ") : "unknown"}`);
     if (footnotes) {

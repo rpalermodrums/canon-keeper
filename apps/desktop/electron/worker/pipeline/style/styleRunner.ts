@@ -20,6 +20,7 @@ import {
   buildRepetitionMetricFromCounts,
   computeRepetitionCounts,
   mergeRepetitionCounts,
+  type RepetitionThresholds,
   type RepetitionCounts
 } from "./repetition";
 import { computeToneBaseline, computeToneMetric, computeToneVector, type ToneVector } from "./tone";
@@ -30,11 +31,14 @@ import {
   pickDialogueIssues,
   type DialogueTic
 } from "./dialogue";
+import { DEFAULT_STOPWORDS } from "./utils";
+import { loadProjectConfig } from "../../config";
 
 const DRIFT_THRESHOLD = 2.5;
 
 export type StyleRunOptions = {
   documentId?: string;
+  rootPath?: string;
 };
 
 function buildSceneText(scene: SceneSummary, chunks: ChunkRecord[]): string {
@@ -76,11 +80,30 @@ function parseDialogueMetric(raw: unknown): DialogueTic[] | null {
   return null;
 }
 
+function resolveStopwords(configValue: "default" | string[] | undefined): Set<string> {
+  if (configValue === "default" || !configValue) {
+    return DEFAULT_STOPWORDS;
+  }
+  const normalized = configValue.map((word) => word.trim().toLowerCase()).filter(Boolean);
+  if (normalized.length === 0) {
+    return DEFAULT_STOPWORDS;
+  }
+  return new Set(normalized);
+}
+
 export function runStyleMetrics(
   db: Database.Database,
   projectId: string,
   options: StyleRunOptions = {}
 ): void {
+  const config = options.rootPath ? loadProjectConfig(options.rootPath) : undefined;
+  const repetitionThresholds: RepetitionThresholds = {
+    projectCount: config?.style.repetitionThreshold.projectCount ?? 12,
+    sceneCount: config?.style.repetitionThreshold.sceneCount ?? 3
+  };
+  const toneBaselineSceneCount = Math.max(1, config?.style.toneBaselineScenes ?? 10);
+  const stopwords = resolveStopwords(config?.style.stopwords);
+
   const documents = listDocuments(db, projectId);
   const scenes = listScenesForProject(db, projectId);
   const targetDocIds = options.documentId ? new Set([options.documentId]) : null;
@@ -127,7 +150,7 @@ export function runStyleMetrics(
     }
     const docChunks = getChunks(doc.id);
     const docScenes = scenesByDoc.get(doc.id) ?? [];
-    const counts = computeRepetitionCounts(docChunks, docScenes);
+    const counts = computeRepetitionCounts(docChunks, docScenes, { stopwords });
     docCounts.set(doc.id, counts);
     replaceStyleMetric(db, {
       projectId,
@@ -141,7 +164,7 @@ export function runStyleMetrics(
   const mergedCounts = mergeRepetitionCounts(
     documents.map((doc) => docCounts.get(doc.id) ?? {})
   );
-  const repetition = buildRepetitionMetricFromCounts(mergedCounts);
+  const repetition = buildRepetitionMetricFromCounts(mergedCounts, repetitionThresholds);
   replaceStyleMetric(db, {
     projectId,
     scopeType: "project",
@@ -183,7 +206,7 @@ export function runStyleMetrics(
     }
   }
 
-  const baselineScenes = scenes.slice(0, 10);
+  const baselineScenes = scenes.slice(0, toneBaselineSceneCount);
   const baselineDocIds = new Set(baselineScenes.map((scene) => scene.document_id));
   const updateAll =
     !targetDocIds ||

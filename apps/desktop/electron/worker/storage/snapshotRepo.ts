@@ -59,3 +59,32 @@ export function insertSnapshot(
 
   return { snapshot, created: true };
 }
+
+export function listSnapshotSummaries(
+  db: Database.Database,
+  projectId: string,
+  limit = 100
+): Array<{
+  id: string;
+  document_id: string;
+  document_path: string;
+  version: number;
+  created_at: number;
+}> {
+  return db
+    .prepare(
+      `SELECT s.id, s.document_id, d.path as document_path, s.version, s.created_at
+       FROM document_snapshot s
+       JOIN document d ON d.id = s.document_id
+       WHERE d.project_id = ?
+       ORDER BY s.created_at DESC
+       LIMIT ?`
+    )
+    .all(projectId, limit) as Array<{
+    id: string;
+    document_id: string;
+    document_path: string;
+    version: number;
+    created_at: number;
+  }>;
+}

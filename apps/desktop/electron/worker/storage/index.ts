@@ -9,7 +9,7 @@ export {
   markDocumentMissing,
   markDocumentSeen
 } from "./documentRepo";
-export { insertSnapshot, getLatestSnapshot } from "./snapshotRepo";
+export { insertSnapshot, getLatestSnapshot, listSnapshotSummaries } from "./snapshotRepo";
 export {
   listChunksForDocument,
   deleteChunksByIds,
@@ -17,7 +17,7 @@ export {
   updateChunk,
   getChunkById
 } from "./chunkRepo";
-export { logEvent } from "./eventLogRepo";
+export { logEvent, listEvents } from "./eventLogRepo";
 export {
   replaceScenesForDocument,
   listScenesForProject,
@@ -38,7 +38,8 @@ export {
   createEntity,
   addAlias,
   listAliases,
-  getOrCreateEntityByName
+  getOrCreateEntityByName,
+  deleteEntityIfNoClaims
 } from "./entityRepo";
 export { listClaimsForEntity, insertClaim, supersedeClaims, listClaimsByField } from "./claimRepo";
 export { insertClaimEvidence, listEvidenceForClaim } from "./claimEvidenceRepo";
@@ -48,8 +49,10 @@ export {
   insertIssue,
   insertIssueEvidence,
   listIssues,
+  type ListIssueFilters,
   listIssuesWithEvidence,
   dismissIssue,
+  resolveIssue,
   deleteIssuesByIds,
   deleteIssuesByTypeAndDocument,
   deleteIssuesByTypeAndChunkIds

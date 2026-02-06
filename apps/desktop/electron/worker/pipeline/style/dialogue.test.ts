@@ -25,6 +25,15 @@ describe("dialogue extraction", () => {
     expect(lines[1]?.speaker).toBe("Mira");
   });
 
+  it("extracts dialogue across mixed quote styles", () => {
+    const text = 'Mira said, “Well, look.” Jordan said, "Listen, now."';
+    const lines = extractDialogueLines([chunk({ text })]);
+
+    expect(lines.length).toBe(2);
+    expect(lines[0]?.speaker).toBe("Mira");
+    expect(lines[1]?.speaker).toBe("Jordan");
+  });
+
   it("computes tics and flags frequent starters", () => {
     const text =
       'Mira said, "Well, look." Mira said, "Well, look." Mira said, "Well, look."';

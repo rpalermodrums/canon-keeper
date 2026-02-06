@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { openDatabase, createProject, createDocument, insertChunks, createEntity, insertClaim, insertClaimEvidence } from "../storage";
+import {
+  openDatabase,
+  createProject,
+  createDocument,
+  insertChunks,
+  createEntity,
+  insertClaim,
+  insertClaimEvidence,
+  replaceScenesForDocument
+} from "../storage";
 import { exportProject } from "./exporter";
 import { hashText } from "../../../../../packages/shared/utils/hashing";
 
@@ -62,5 +71,40 @@ describe("exportProject", () => {
 
     const projectDump = JSON.parse(fs.readFileSync(jsonPath, "utf8")) as Record<string, unknown>;
     expect(projectDump).toHaveProperty("sceneEvidence");
+  });
+
+  it("marks uncited scenes without fabricating fallback citations", () => {
+    const { rootPath, db, projectId } = setupDb();
+    const doc = createDocument(db, projectId, path.join(rootPath, "draft.md"), "md");
+    const text = "A quiet room.";
+    const chunk = insertChunks(db, doc.id, [
+      {
+        document_id: doc.id,
+        ordinal: 0,
+        text,
+        text_hash: hashText(text),
+        start_char: 0,
+        end_char: text.length
+      }
+    ])[0]!;
+
+    replaceScenesForDocument(db, doc.id, [
+      {
+        project_id: projectId,
+        document_id: doc.id,
+        ordinal: 0,
+        start_chunk_id: chunk.id,
+        end_chunk_id: chunk.id,
+        start_char: 0,
+        end_char: text.length,
+        title: "Room"
+      }
+    ]);
+
+    const outDir = path.join(rootPath, "out");
+    exportProject(db, projectId, outDir, "md");
+    const scenes = fs.readFileSync(path.join(outDir, "scenes.md"), "utf8");
+    expect(scenes).toContain("[uncited]");
+    expect(scenes).not.toContain("[^c1]");
   });
 });

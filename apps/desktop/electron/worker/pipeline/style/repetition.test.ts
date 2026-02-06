@@ -71,4 +71,15 @@ describe("computeRepetitionMetrics", () => {
     expect(merged.cold?.byScene.s1).toBe(2);
     expect(merged.cold?.byScene.s2).toBe(1);
   });
+
+  it("maps repetition evidence even when manuscript casing differs", () => {
+    const chunks = [
+      chunk({ id: "c1", ordinal: 0, text: "Cold cold COLD cold cold cold cold cold cold cold cold cold." })
+    ];
+    const scenes = [scene({ id: "s1", start_chunk_id: "c1", end_chunk_id: "c1" })];
+    const result = computeRepetitionMetrics(chunks, scenes);
+    const cold = result.metric.top.find((entry) => entry.ngram === "cold");
+    expect(cold).toBeTruthy();
+    expect((cold?.examples ?? []).length).toBeGreaterThan(0);
+  });
 });

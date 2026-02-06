@@ -5,6 +5,7 @@ import { findExactSpan, findFuzzySpan } from "../../../../../packages/shared/uti
 import {
   addAlias,
   createEntity,
+  deleteEntityIfNoClaims,
   getEntityByAlias,
   getOrCreateEntityByName,
   insertClaim,
@@ -185,6 +186,8 @@ export async function runExtraction(
 
   const chunkMap = new Map(args.chunks.map((chunk) => [chunk.ordinal, chunk]));
   const entityMap = new Map<string, string>();
+  const knownEntityIds = new Set(entities.map((entity) => entity.id));
+  const createdEntityIds = new Set<string>();
 
   for (const extracted of completion.json.entities ?? []) {
     const existing = getEntityByAlias(db, args.projectId, extracted.displayName);
@@ -192,9 +195,12 @@ export async function runExtraction(
       existing ??
       createEntity(db, {
         projectId: args.projectId,
-        type: extracted.type,
-        displayName: extracted.displayName
-      });
+          type: extracted.type,
+          displayName: extracted.displayName
+        });
+    if (!existing) {
+      createdEntityIds.add(entity.id);
+    }
 
     for (const alias of extracted.aliases ?? []) {
       addAlias(db, entity.id, alias);
@@ -202,6 +208,65 @@ export async function runExtraction(
 
     entityMap.set(extracted.tempId, entity.id);
     touched.add(entity.id);
+  }
+
+  const resolveEntityRef = (ref: string): string | null => {
+    const mappedTemp = entityMap.get(ref);
+    if (mappedTemp) {
+      return mappedTemp;
+    }
+    if (knownEntityIds.has(ref) || createdEntityIds.has(ref)) {
+      return ref;
+    }
+    return null;
+  };
+
+  const merges = [...(completion.json.suggestedMerges ?? [])].sort((a, b) => {
+    if (b.confidence !== a.confidence) {
+      return b.confidence - a.confidence;
+    }
+    return `${a.a}:${a.b}`.localeCompare(`${b.a}:${b.b}`);
+  });
+
+  for (const merge of merges) {
+    if (merge.confidence < 0.75) {
+      continue;
+    }
+    const entityA = resolveEntityRef(merge.a);
+    const entityB = resolveEntityRef(merge.b);
+    if (!entityA || !entityB || entityA === entityB) {
+      continue;
+    }
+
+    const aKnown = knownEntityIds.has(entityA);
+    const bKnown = knownEntityIds.has(entityB);
+    let target = entityA;
+    let source = entityB;
+    if (!aKnown && bKnown) {
+      target = entityB;
+      source = entityA;
+    } else if (aKnown === bKnown && entityB < entityA) {
+      target = entityB;
+      source = entityA;
+    }
+
+    for (const alias of listAliases(db, source)) {
+      addAlias(db, target, alias);
+    }
+
+    for (const [tempId, mappedEntityId] of entityMap.entries()) {
+      if (mappedEntityId === source) {
+        entityMap.set(tempId, target);
+      }
+    }
+
+    if (createdEntityIds.has(source)) {
+      deleteEntityIfNoClaims(db, source);
+      createdEntityIds.delete(source);
+    }
+
+    touched.delete(source);
+    touched.add(target);
   }
 
   for (const claim of completion.json.claims ?? []) {

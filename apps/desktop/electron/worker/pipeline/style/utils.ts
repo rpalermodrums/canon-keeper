@@ -72,14 +72,14 @@ export const DEFAULT_STOPWORDS = new Set([
   "very"
 ]);
 
-export function tokenize(text: string): string[] {
+export function tokenize(text: string, stopwords: Set<string> = DEFAULT_STOPWORDS): string[] {
   const cleaned = text
     .replace(/[^A-Za-z0-9'\-\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
   if (!cleaned) return [];
-  return cleaned.split(" ").filter((token) => token.length >= 3 && !DEFAULT_STOPWORDS.has(token));
+  return cleaned.split(" ").filter((token) => token.length >= 3 && !stopwords.has(token));
 }
 
 export function sentenceSplit(text: string): string[] {

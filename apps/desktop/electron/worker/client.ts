@@ -27,6 +27,7 @@ export class WorkerClient {
   private lastError: string | null = null;
   private lastProjectRoot: string | null = null;
   private restarting = false;
+  private stableTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.spawn();
@@ -67,7 +68,13 @@ export class WorkerClient {
     this.child = child;
     this.state = "ready";
     this.restarting = false;
-    this.restartAttempts = 0;
+    if (this.stableTimer) {
+      clearTimeout(this.stableTimer);
+    }
+    this.stableTimer = setTimeout(() => {
+      this.restartAttempts = 0;
+      this.stableTimer = null;
+    }, 15_000);
 
     child.on("message", (message: RpcResponse) => {
       if (!message || typeof message !== "object") {
@@ -81,6 +88,10 @@ export class WorkerClient {
     });
 
     child.on("exit", (code, signal) => {
+      if (this.stableTimer) {
+        clearTimeout(this.stableTimer);
+        this.stableTimer = null;
+      }
       this.state = "restarting";
       this.lastError = `Worker exited (${code ?? "unknown"}${signal ? `, ${signal}` : ""})`;
       this.failPending(new Error("Worker crashed"));
@@ -88,6 +99,10 @@ export class WorkerClient {
     });
 
     child.on("error", (error) => {
+      if (this.stableTimer) {
+        clearTimeout(this.stableTimer);
+        this.stableTimer = null;
+      }
       this.state = "restarting";
       this.lastError = error.message;
       this.failPending(error);

@@ -1,8 +1,7 @@
 import type Database from "better-sqlite3";
 import crypto from "node:crypto";
 import type { IssueSeverity, IssueStatus, IssueType } from "../../../../../packages/shared/types/persisted";
-import { getChunkById } from "./chunkRepo";
-import { getDocumentById } from "./documentRepo";
+import { createEvidenceMapper } from "../utils/evidence";
 
 export type IssueInsert = {
   projectId: string;
@@ -23,6 +22,12 @@ export type IssueSummary = {
   status: IssueStatus;
   created_at: number;
   updated_at: number;
+};
+
+export type ListIssueFilters = {
+  status?: IssueStatus | "all";
+  type?: IssueType;
+  severity?: IssueSeverity;
 };
 
 export function clearIssuesByType(
@@ -94,27 +99,39 @@ export function insertIssueEvidence(
   );
 }
 
-export function listIssues(db: Database.Database, projectId: string): IssueSummary[] {
+export function listIssues(
+  db: Database.Database,
+  projectId: string,
+  filters: ListIssueFilters = {}
+): IssueSummary[] {
+  const where: string[] = ["project_id = ?"];
+  const params: unknown[] = [projectId];
+  const status = filters.status ?? "open";
+  if (status !== "all") {
+    where.push("status = ?");
+    params.push(status);
+  }
+  if (filters.type) {
+    where.push("type = ?");
+    params.push(filters.type);
+  }
+  if (filters.severity) {
+    where.push("severity = ?");
+    params.push(filters.severity);
+  }
   return db
     .prepare(
-      "SELECT id, project_id, type, severity, title, description, status, created_at, updated_at FROM issue WHERE project_id = ? ORDER BY created_at DESC"
+      `SELECT id, project_id, type, severity, title, description, status, created_at, updated_at FROM issue WHERE ${where.join(
+        " AND "
+      )} ORDER BY created_at DESC`
     )
-    .all(projectId) as IssueSummary[];
-}
-
-function buildExcerpt(text: string, start: number, end: number): string {
-  const context = 60;
-  const prefixStart = Math.max(0, start - context);
-  const suffixEnd = Math.min(text.length, end + context);
-  const before = text.slice(prefixStart, start);
-  const highlight = text.slice(start, end);
-  const after = text.slice(end, suffixEnd);
-  return `${prefixStart > 0 ? "…" : ""}${before}[${highlight}]${after}${suffixEnd < text.length ? "…" : ""}`;
+    .all(...params) as IssueSummary[];
 }
 
 export function listIssuesWithEvidence(
   db: Database.Database,
-  projectId: string
+  projectId: string,
+  filters: ListIssueFilters = {}
 ): Array<
   IssueSummary & {
     evidence: Array<{
@@ -124,15 +141,22 @@ export function listIssuesWithEvidence(
       quoteStart: number;
       quoteEnd: number;
       excerpt: string;
+      lineStart: number | null;
+      lineEnd: number | null;
     }>;
   }
 > {
-  const issues = listIssues(db, projectId);
+  const issues = listIssues(db, projectId, filters);
+  if (issues.length === 0) {
+    return [];
+  }
+  const issueIds = issues.map((issue) => issue.id);
+  const placeholders = issueIds.map(() => "?").join(", ");
   const evidenceRows = db
     .prepare(
-      "SELECT issue_id, chunk_id, quote_start, quote_end FROM issue_evidence WHERE issue_id IN (SELECT id FROM issue WHERE project_id = ?)"
+      `SELECT issue_id, chunk_id, quote_start, quote_end FROM issue_evidence WHERE issue_id IN (${placeholders})`
     )
-    .all(projectId) as Array<{
+    .all(...issueIds) as Array<{
     issue_id: string;
     chunk_id: string;
     quote_start: number;
@@ -148,21 +172,14 @@ export function listIssuesWithEvidence(
       quoteStart: number;
       quoteEnd: number;
       excerpt: string;
+      lineStart: number | null;
+      lineEnd: number | null;
     }>
   >();
+  const mapEvidence = createEvidenceMapper(db);
   for (const row of evidenceRows) {
     const list = evidenceMap.get(row.issue_id) ?? [];
-    const chunk = getChunkById(db, row.chunk_id);
-    const doc = chunk ? getDocumentById(db, chunk.document_id) : null;
-    const excerpt = chunk ? buildExcerpt(chunk.text, row.quote_start, row.quote_end) : "";
-    list.push({
-      chunkId: row.chunk_id,
-      documentPath: doc?.path ?? null,
-      chunkOrdinal: chunk?.ordinal ?? null,
-      quoteStart: row.quote_start,
-      quoteEnd: row.quote_end,
-      excerpt
-    });
+    list.push(mapEvidence(row));
     evidenceMap.set(row.issue_id, list);
   }
 
@@ -175,6 +192,14 @@ export function listIssuesWithEvidence(
 export function dismissIssue(db: Database.Database, issueId: string): void {
   db.prepare("UPDATE issue SET status = ?, updated_at = ? WHERE id = ?").run(
     "dismissed",
+    Date.now(),
+    issueId
+  );
+}
+
+export function resolveIssue(db: Database.Database, issueId: string): void {
+  db.prepare("UPDATE issue SET status = ?, updated_at = ? WHERE id = ?").run(
+    "resolved",
     Date.now(),
     issueId
   );

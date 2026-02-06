@@ -11,15 +11,14 @@ export type ProjectConfig = {
     baseUrl?: string;
   };
   style: {
-    stopwords: "default";
+    stopwords: "default" | string[];
     repetitionThreshold: { projectCount: number; sceneCount: number };
     toneBaselineScenes: number;
   };
 };
 
-export function loadProjectConfig(rootPath: string): ProjectConfig {
-  const configPath = path.join(rootPath, "canonkeeper.json");
-  const defaults: ProjectConfig = {
+function defaultProjectConfig(rootPath: string): ProjectConfig {
+  return {
     projectName: path.basename(rootPath),
     documents: [],
     llm: {
@@ -34,6 +33,11 @@ export function loadProjectConfig(rootPath: string): ProjectConfig {
       toneBaselineScenes: 10
     }
   };
+}
+
+export function loadProjectConfig(rootPath: string): ProjectConfig {
+  const configPath = path.join(rootPath, "canonkeeper.json");
+  const defaults = defaultProjectConfig(rootPath);
 
   if (!fs.existsSync(configPath)) {
     return defaults;
@@ -45,7 +49,14 @@ export function loadProjectConfig(rootPath: string): ProjectConfig {
       ...defaults,
       ...raw,
       llm: { ...defaults.llm, ...(raw.llm ?? {}) },
-      style: { ...defaults.style, ...(raw.style ?? {}) }
+      style: {
+        ...defaults.style,
+        ...(raw.style ?? {}),
+        repetitionThreshold: {
+          ...defaults.style.repetitionThreshold,
+          ...(raw.style?.repetitionThreshold ?? {})
+        }
+      }
     };
   } catch {
     return defaults;
@@ -55,6 +66,21 @@ export function loadProjectConfig(rootPath: string): ProjectConfig {
 export function saveProjectConfig(rootPath: string, config: ProjectConfig): void {
   const configPath = path.join(rootPath, "canonkeeper.json");
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+export function ensureProjectConfig(rootPath: string): ProjectConfig {
+  const configPath = path.join(rootPath, "canonkeeper.json");
+  const config = loadProjectConfig(rootPath);
+  if (!fs.existsSync(configPath)) {
+    saveProjectConfig(rootPath, config);
+    return config;
+  }
+  try {
+    JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    saveProjectConfig(rootPath, config);
+  }
+  return config;
 }
 
 export function resolveDocumentPath(rootPath: string, entry: string): string {

@@ -43,6 +43,7 @@ const SPEAKER_VERBS = [
 ];
 
 const FILLERS = ["well", "look", "listen", "like", "you know", "okay"];
+const QUOTE_CHARS = new Set(['"', "“", "”"]);
 
 type SpeakerCandidate = { name: string; distance: number };
 
@@ -83,17 +84,73 @@ function pickClosestCandidate(
   return sorted[0]?.name ?? null;
 }
 
+function pickNearbyCandidate(
+  candidates: SpeakerCandidate[],
+  maxDistance: number,
+  knownSet?: Set<string>
+): string | null {
+  const nearby = candidates.filter((candidate) => candidate.distance <= maxDistance);
+  if (nearby.length === 0) {
+    return null;
+  }
+  return pickClosestCandidate(nearby, knownSet);
+}
+
+function normalizeSpeakerSearchText(text: string): string {
+  return text
+    .replace(/[“”„‟]/g, '"')
+    .replace(/[‘’‛`´]/g, "'");
+}
+
+function extractQuoteSpans(text: string): Array<{ start: number; end: number; inner: string }> {
+  const spans: Array<{ start: number; end: number; inner: string }> = [];
+  let openIndex: number | null = null;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (!char || !QUOTE_CHARS.has(char)) {
+      continue;
+    }
+
+    if (openIndex === null) {
+      openIndex = i;
+      continue;
+    }
+
+    if (i <= openIndex + 1) {
+      openIndex = i;
+      continue;
+    }
+
+    const raw = text.slice(openIndex + 1, i).trim();
+    if (raw.length === 0) {
+      openIndex = i;
+      continue;
+    }
+
+    spans.push({
+      start: openIndex,
+      end: i + 1,
+      inner: raw
+    });
+    openIndex = null;
+  }
+
+  return spans;
+}
+
 function findSpeaker(
   text: string,
   quoteStart: number,
   quoteEnd: number,
   knownSet?: Set<string>
 ): string | null {
+  const normalized = normalizeSpeakerSearchText(text);
   const windowSize = 160;
   const windowStart = Math.max(0, quoteStart - windowSize);
-  const windowEnd = Math.min(text.length, quoteEnd + windowSize);
-  const before = text.slice(windowStart, quoteStart);
-  const after = text.slice(quoteEnd, windowEnd);
+  const windowEnd = Math.min(normalized.length, quoteEnd + windowSize);
+  const before = normalized.slice(windowStart, quoteStart);
+  const after = normalized.slice(quoteEnd, windowEnd);
 
   const namePattern = "[A-Z][A-Za-z'\\-]+(?:\\s+[A-Z][A-Za-z'\\-]+)*";
   const verbs = SPEAKER_VERBS.join("|");
@@ -103,14 +160,21 @@ function findSpeaker(
   const afterVerbName = new RegExp(`(?:${verbs})\\s+(${namePattern})\\b`, "g");
   const afterNameVerb = new RegExp(`(${namePattern})\\s+(?:${verbs})\\b`, "g");
 
-  const candidates = [
+  const beforeCandidates = [
     ...collectCandidates(before, beforeNameVerb, true),
-    ...collectCandidates(before, beforeVerbName, true),
+    ...collectCandidates(before, beforeVerbName, true)
+  ];
+  const afterCandidates = [
     ...collectCandidates(after, afterVerbName, false),
     ...collectCandidates(after, afterNameVerb, false)
   ];
 
-  return pickClosestCandidate(candidates, knownSet);
+  // Prefer attribution phrases adjacent to the quote boundary.
+  return (
+    pickNearbyCandidate(beforeCandidates, 12, knownSet) ??
+    pickNearbyCandidate(afterCandidates, 12, knownSet) ??
+    pickClosestCandidate([...beforeCandidates, ...afterCandidates], knownSet)
+  );
 }
 
 export function extractDialogueLines(
@@ -118,22 +182,18 @@ export function extractDialogueLines(
   options: DialogueExtractOptions = {}
 ): DialogueLine[] {
   const lines: DialogueLine[] = [];
-  const quoteRegex = /(["“”])([^"“”]+)\1/g;
   const knownSet =
     options.knownSpeakers && options.knownSpeakers.length > 0
       ? new Set(options.knownSpeakers.map((name) => normalizeAlias(name)))
       : undefined;
 
   for (const chunk of chunks) {
-    let match: RegExpExecArray | null = null;
+    const spans = extractQuoteSpans(chunk.text);
     let lastSpeaker: string | null = null;
     let lastQuoteEnd = 0;
-    while ((match = quoteRegex.exec(chunk.text))) {
-      const full = match[0];
-      const inner = match[2]?.trim() ?? "";
-      if (!inner) continue;
-      const quoteStart = match.index;
-      const quoteEnd = match.index + full.length;
+    for (const span of spans) {
+      const quoteStart = span.start;
+      const quoteEnd = span.end;
       let speaker = findSpeaker(chunk.text, quoteStart, quoteEnd, knownSet);
       const interstitial = chunk.text.slice(lastQuoteEnd, quoteStart).trim();
       if (!speaker && lastSpeaker && interstitial.length < 60) {
@@ -145,7 +205,7 @@ export function extractDialogueLines(
       lastQuoteEnd = quoteEnd;
       lines.push({
         chunkId: chunk.id,
-        text: inner,
+        text: span.inner,
         quoteStart,
         quoteEnd,
         speaker

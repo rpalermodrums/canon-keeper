@@ -80,18 +80,35 @@ export function runContinuityChecks(
       const claimsArray = Array.from(distinctValues.values());
       const confirmed = claimsArray.find((claim) => claim.status === "confirmed");
       const inferred = claimsArray.find((claim) => claim.status !== "confirmed");
+      const claimValues = claimsArray
+        .slice(0, 2)
+        .map((claim) => {
+          try {
+            const parsed = JSON.parse(claim.value_json);
+            if (typeof parsed === "string" || typeof parsed === "number") {
+              return String(parsed);
+            }
+            return JSON.stringify(parsed);
+          } catch {
+            return claim.value_json;
+          }
+        })
+        .filter(Boolean);
+      const fromValue = claimValues[0] ?? "one value";
+      const toValue = claimValues[1] ?? "another value";
+
       const issue = insertIssue(db, {
         projectId,
         type: "continuity",
         severity: confirmed && inferred ? "high" : "medium",
         title:
           confirmed && inferred
-            ? `Draft conflicts with confirmed canon: ${entity.display_name} ${field}`
-            : `Continuity conflict: ${entity.display_name} ${field}`,
+            ? `Did ${entity.display_name}'s ${field} change from ${fromValue} to ${toValue}?`
+            : `Did ${entity.display_name}'s ${field} change from ${fromValue} to ${toValue}?`,
         description:
           confirmed && inferred
-            ? `Inferred value conflicts with confirmed canon for ${entity.display_name} (${field}).`
-            : `Conflicting values detected for ${entity.display_name} (${field}).`
+            ? `Confirmed canon and draft evidence disagree for ${entity.display_name} (${field}). Please choose which value is canonical.`
+            : `Conflicting evidence-backed values were found for ${entity.display_name} (${field}). Please resolve which one is canonical.`
       });
 
       for (const claim of claimsArray.slice(0, 2)) {
