@@ -5,13 +5,14 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k \"pnpm dev:renderer\" \"pnpm dev:electron\" \"pnpm dev:electron:watch\"",
+    "dev": "concurrently -k \"bun run dev:renderer\" \"bun run dev:electron\" \"bun run dev:electron:watch\"",
     "dev:renderer": "vite --config renderer/vite.config.ts",
+    "dev:renderer:host": "vite --host 0.0.0.0 --config renderer/vite.config.ts",
     "dev:electron": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 tsx electron/main.ts",
     "dev:electron:watch": "tsc -p electron/tsconfig.json --watch --preserveWatchOutput",
-    "build": "pnpm build:renderer && pnpm build:electron",
+    "build": "bun run build:renderer && bun run build:electron",
     "build:renderer": "vite build --config renderer/vite.config.ts",
-    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:electron": "tsc -p electron/tsconfig.typecheck.json --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "typecheck": "tsc -p electron/tsconfig.typecheck.json && tsc -p renderer/tsconfig.json --noEmit"

@@ -1,0 +1,30 @@
+name: canonkeeper
+
+x-workspace-build: &workspace-build
+  context: .
+  dockerfile: Dockerfile
+  target: workspace
+
+services:
+  dev:
+    image: canonkeeper/dev:local
+    build: *workspace-build
+    command: ["bun", "run", "dev:container"]
+    ports:
+      - "5173:5173"
+  lint:
+    image: canonkeeper/lint:local
+    build: *workspace-build
+    command: ["bun", "run", "lint:local"]
+  typecheck:
+    image: canonkeeper/typecheck:local
+    build: *workspace-build
+    command: ["bun", "run", "typecheck:local"]
+  test:
+    image: canonkeeper/test:local
+    build: *workspace-build
+    command: ["bun", "run", "test:local"]
+  build:
+    image: canonkeeper/build:local
+    build: *workspace-build
+    command: ["bun", "run", "build:local"]

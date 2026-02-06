@@ -25,7 +25,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseHandle {
     const message = error instanceof Error ? error.message : "Unknown database error";
     if (message.includes("NODE_MODULE_VERSION") || message.includes("better_sqlite3.node")) {
       throw new Error(
-        "Failed to load better-sqlite3 native module. Use Node 20 and run `pnpm install` (or `pnpm rebuild better-sqlite3`) before starting CanonKeeper."
+        "Failed to load better-sqlite3 native module. Use Node 20 and run `bun install` (or `bun rebuild better-sqlite3`) before starting CanonKeeper."
       );
     }
     throw error;

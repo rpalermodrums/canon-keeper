@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+**/node_modules
+.DS_Store
+pnpm-lock.yaml
+pnpm-workspace.yaml
+**/dist
+**/dist-*
+**/build
+**/.vite
+**/.cache
+*.log

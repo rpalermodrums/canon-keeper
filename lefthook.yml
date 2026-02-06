@@ -1,10 +1,10 @@
 pre-commit:
   commands:
     lint:
-      run: pnpm lint
+      run: bun run lint
     typecheck:
-      run: pnpm typecheck
+      run: bun run typecheck
 pre-push:
   commands:
     test:
-      run: pnpm test
+      run: bun run test

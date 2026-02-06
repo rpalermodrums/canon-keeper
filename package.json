@@ -2,19 +2,35 @@
   "name": "canonkeeper",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "bun@1.2.23",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=20 <21"
   },
   "scripts": {
-    "dev": "pnpm -C apps/desktop dev",
-    "build": "pnpm -C apps/desktop build",
-    "lint": "eslint . --max-warnings=0",
+    "dev": "docker buildx bake dev --load && docker compose up dev",
+    "dev:local": "bun run --cwd apps/desktop dev",
+    "dev:container": "bun run --cwd apps/desktop dev:renderer:host",
+    "build": "docker buildx bake build --load && docker compose run --rm build",
+    "build:local": "bun run --cwd apps/desktop build",
+    "lint": "docker buildx bake lint --load && docker compose run --rm lint",
+    "lint:local": "eslint . --max-warnings=0",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "test": "vitest run",
-    "typecheck": "pnpm -C apps/desktop typecheck && pnpm -C packages/shared typecheck",
-    "prepare": "lefthook install"
+    "test": "docker buildx bake test --load && docker compose run --rm test",
+    "test:local": "vitest run",
+    "typecheck": "docker buildx bake typecheck --load && docker compose run --rm typecheck",
+    "typecheck:local": "bun run --cwd apps/desktop typecheck && bun run --cwd packages/shared typecheck",
+    "docker:bake": "docker buildx bake",
+    "docker:bake:ci": "docker buildx bake ci --load",
+    "docker:lint": "docker compose run --rm lint",
+    "docker:typecheck": "docker compose run --rm typecheck",
+    "docker:test": "docker compose run --rm test",
+    "docker:build": "docker compose run --rm build",
+    "prepare": "if [ -d .git ]; then lefthook install; else echo 'Skipping lefthook install (no .git)'; fi"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

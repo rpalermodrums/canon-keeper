@@ -3,7 +3,7 @@ export default async function testPreflight(): Promise<void> {
   const major = Number(process.versions.node.split(".")[0]);
   if (major !== 20 && !allowUnsupportedNode) {
     throw new Error(
-      `CanonKeeper tests require Node 20. Detected Node ${process.versions.node}. Run \`mise exec node@20 -- pnpm test\` (or \`nvm use 20\`) before \`pnpm test\`.`
+      `CanonKeeper tests require Node 20. Detected Node ${process.versions.node}. Run \`mise exec node@20 -- bun run test:local\` before \`bun run test:local\`.`
     );
   }
 
@@ -15,7 +15,7 @@ export default async function testPreflight(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     throw new Error(
-      `Failed to load better-sqlite3 during test preflight: ${message}. Run \`pnpm install\` or \`pnpm rebuild better-sqlite3\` with Node 20.`
+      `Failed to load better-sqlite3 during test preflight: ${message}. Run \`bun install\` (or \`bun rebuild better-sqlite3\`) with Node 20.`
     );
   }
 }
