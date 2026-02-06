@@ -35,8 +35,11 @@ describe("askQuestion", () => {
       question: "compass"
     });
 
-    expect(result.answerType).toBe("snippets");
-    expect(result.snippets?.length ?? 0).toBeGreaterThan(0);
+    expect(result.kind).toBe("snippets");
+    if (result.kind !== "snippets") {
+      throw new Error("Expected snippets result");
+    }
+    expect(result.snippets.length).toBeGreaterThan(0);
   });
 
   it("returns not_found when no snippets match", async () => {
@@ -60,8 +63,10 @@ describe("askQuestion", () => {
       question: "submarine"
     });
 
-    expect(result.answerType).toBe("not_found");
-    expect(result.citations).toEqual([]);
-    expect(result.snippets).toBeUndefined();
+    expect(result.kind).toBe("not_found");
+    if (result.kind !== "not_found") {
+      throw new Error("Expected not_found result");
+    }
+    expect(result.reason).toContain("not found");
   });
 });

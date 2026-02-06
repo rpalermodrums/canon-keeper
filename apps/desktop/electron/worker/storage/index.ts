@@ -52,6 +52,7 @@ export {
   type ListIssueFilters,
   listIssuesWithEvidence,
   dismissIssue,
+  undoDismissIssue,
   resolveIssue,
   deleteIssuesByIds,
   deleteIssuesByTypeAndDocument,

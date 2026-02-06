@@ -10,6 +10,22 @@ const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 let workerClient: WorkerClient | null = null;
 
+function installDevtoolsConsoleNoiseFilter(): void {
+  // Chromium devtools may emit unsupported protocol warnings in Electron dev mode.
+  app.on("web-contents-created", (_event, contents) => {
+    contents.on("console-message", (event, _level, message, _line, sourceId) => {
+      const isDevtoolsSource = typeof sourceId === "string" && sourceId.startsWith("devtools://");
+      const isAutofillWarning =
+        typeof message === "string" &&
+        message.includes("Request Autofill.enable failed") &&
+        message.includes("'Autofill.enable' wasn't found");
+      if (isDevtoolsSource && isAutofillWarning) {
+        event.preventDefault();
+      }
+    });
+  });
+}
+
 function getPreloadPath(): string | undefined {
   const devCandidate = path.join(process.cwd(), "dist-electron", "preload.js");
   if (process.env.VITE_DEV_SERVER_URL && fs.existsSync(devCandidate)) {
@@ -44,6 +60,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  installDevtoolsConsoleNoiseFilter();
   workerClient = new WorkerClient();
   createWindow();
 
@@ -108,6 +125,37 @@ app.whenReady().then(() => {
       lastError: workerClient.getLastError()
     };
   });
+  ipcMain.handle("project:subscribeStatus", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    const workerState = workerClient.getState();
+    if (workerState !== "ready") {
+      return {
+        state: "idle",
+        lastJob: undefined,
+        projectId: null,
+        queueDepth: 0,
+        workerState,
+        lastError: workerClient.getLastError()
+      };
+    }
+    const status = (await workerClient.request("project.subscribeStatus")) as Record<
+      string,
+      unknown
+    >;
+    return {
+      ...status,
+      workerState,
+      lastError: workerClient.getLastError()
+    };
+  });
+  ipcMain.handle("system:healthCheck", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("system.healthCheck");
+  });
   ipcMain.handle("project:getProcessingState", async () => {
     if (!workerClient) {
       throw new Error("Worker not initialized");
@@ -167,6 +215,12 @@ app.whenReady().then(() => {
       throw new Error("Worker not initialized");
     }
     return workerClient.request("issues.dismiss", payload);
+  });
+  ipcMain.handle("issues:undoDismiss", async (_event, payload) => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("issues.undoDismiss", payload);
   });
   ipcMain.handle("issues:resolve", async (_event, payload) => {
     if (!workerClient) {

@@ -322,3 +322,38 @@ export interface IssueWithEvidence {
   issue: IssueRow;
   evidence: EvidenceSpan[];
 }
+
+export type Citation = EvidenceSpan;
+
+export interface CitedSnippet {
+  chunkId: ID;
+  documentId: ID;
+  documentPath: string;
+  ordinal: number;
+  text: string;
+  snippet: string;
+  score: number;
+}
+
+export type AskResult =
+  | {
+      kind: "answer";
+      answer: string;
+      confidence: number;
+      citations: Citation[];
+    }
+  | {
+      kind: "snippets";
+      snippets: CitedSnippet[];
+    }
+  | {
+      kind: "not_found";
+      reason: string;
+    };
+
+export type UserFacingError = {
+  code: string;
+  message: string;
+  actionLabel?: string;
+  action?: string;
+};

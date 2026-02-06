@@ -1,21 +1,25 @@
+import { createRequire } from "node:module";
+
+const requireFromEsm = createRequire(import.meta.url);
+
 export default async function testPreflight(): Promise<void> {
-  const allowUnsupportedNode = process.env.CANONKEEPER_ALLOW_UNSUPPORTED_NODE === "1";
-  const major = Number(process.versions.node.split(".")[0]);
-  if (major !== 20 && !allowUnsupportedNode) {
-    throw new Error(
-      `CanonKeeper tests require Node 20. Detected Node ${process.versions.node}. Run \`mise exec node@20 -- bun run test:local\` before \`bun run test:local\`.`
-    );
-  }
+  const runtimeLabel = process.versions.bun
+    ? `Bun ${process.versions.bun} (Node compat ${process.versions.node})`
+    : `Node ${process.versions.node}`;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Database = require("better-sqlite3");
+    const Database = requireFromEsm("better-sqlite3");
     const db = new Database(":memory:");
     db.close();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    const isAbiMismatch =
+      message.includes("NODE_MODULE_VERSION") || message.includes("better_sqlite3.node");
+    const recovery = isAbiMismatch
+      ? "Reinstall native deps for your current runtime with `bun install` (or `npm rebuild better-sqlite3`)."
+      : "Verify native toolchain and reinstall dependencies (`bun install`).";
     throw new Error(
-      `Failed to load better-sqlite3 during test preflight: ${message}. Run \`bun install\` (or \`bun rebuild better-sqlite3\`) with Node 20.`
+      `Failed to load better-sqlite3 during test preflight on ${runtimeLabel}: ${message}. ${recovery}`
     );
   }
 }

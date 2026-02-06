@@ -63,7 +63,9 @@ type IssueSummary = {
 };
 
 type AskResult = {
-  answerType: "snippets" | "not_found";
+  kind: "answer" | "snippets" | "not_found";
+  answer?: string;
+  reason?: string;
   snippets?: Array<{ chunkId: string; snippet: string }>;
 };
 
@@ -311,16 +313,21 @@ describe("worker RPC integration", () => {
       const askResult = await worker.request<AskResult>("search.ask", {
         question: "What color are Mira's eyes?"
       });
-      expect(["snippets", "not_found"]).toContain(askResult.answerType);
-      if (askResult.answerType === "snippets") {
+      expect(["answer", "snippets", "not_found"]).toContain(askResult.kind);
+      if (askResult.kind === "snippets") {
         expect((askResult.snippets ?? []).length).toBeGreaterThan(0);
       }
 
-      const exportResult = await worker.request<{ ok: boolean }>("export.run", {
+      const exportResult = await worker.request<
+        { ok: true; files: string[]; elapsedMs: number } | { ok: false; error: string }
+      >("export.run", {
         outDir,
         kind: "md"
       });
       expect(exportResult.ok).toBe(true);
+      if (exportResult.ok) {
+        expect(exportResult.files.length).toBeGreaterThan(0);
+      }
 
       const scenesMarkdown = fs.readFileSync(path.join(outDir, "scenes.md"), "utf8");
       const sourceText = fs.readFileSync(docPath, "utf8");
@@ -392,7 +399,7 @@ describe("worker RPC integration", () => {
       const askResult = await worker.request<AskResult>("search.ask", {
         question: "Who is speaking in the market scene?"
       });
-      expect(["snippets", "not_found"]).toContain(askResult.answerType);
+      expect(["answer", "snippets", "not_found"]).toContain(askResult.kind);
     } finally {
       await worker.close();
     }

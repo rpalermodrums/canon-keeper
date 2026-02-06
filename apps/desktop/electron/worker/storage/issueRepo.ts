@@ -197,6 +197,12 @@ export function dismissIssue(db: Database.Database, issueId: string): void {
   );
 }
 
+export function undoDismissIssue(db: Database.Database, issueId: string): void {
+  db.prepare(
+    "UPDATE issue SET status = ?, updated_at = ? WHERE id = ? AND status = ?"
+  ).run("open", Date.now(), issueId, "dismissed");
+}
+
 export function resolveIssue(db: Database.Database, issueId: string): void {
   db.prepare("UPDATE issue SET status = ?, updated_at = ? WHERE id = ?").run(
     "resolved",

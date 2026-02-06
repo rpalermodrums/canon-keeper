@@ -1,13 +1,24 @@
 import type Database from "better-sqlite3";
 import { searchChunks, type SearchResult } from "./fts";
 
-export type AskResult = {
-  answerType: "not_found" | "snippets";
-  answer: string;
-  confidence: number;
-  citations: Array<{ chunkId: string; quoteStart: number; quoteEnd: number }>;
-  snippets?: SearchResult[];
-};
+export type AskCitation = { chunkId: string; quoteStart: number; quoteEnd: number };
+export type CitedSnippet = SearchResult;
+
+export type AskResult =
+  | {
+      kind: "answer";
+      answer: string;
+      confidence: number;
+      citations: AskCitation[];
+    }
+  | {
+      kind: "snippets";
+      snippets: CitedSnippet[];
+    }
+  | {
+      kind: "not_found";
+      reason: string;
+    };
 
 export async function askQuestion(
   db: Database.Database,
@@ -17,18 +28,13 @@ export async function askQuestion(
   const snippets = searchChunks(db, args.question, 8, args.projectId);
   if (snippets.length === 0) {
     return {
-      answerType: "not_found",
-      answer: "Answer not found in the indexed manuscript text.",
-      confidence: 0,
-      citations: []
+      kind: "not_found",
+      reason: "Answer not found in the indexed manuscript text."
     };
   }
 
   return {
-    answerType: "snippets",
-    answer: "Showing evidence-backed excerpts from your manuscript.",
-    confidence: 1,
-    citations: [],
+    kind: "snippets",
     snippets
   };
 }

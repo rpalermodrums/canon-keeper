@@ -9,6 +9,7 @@ import {
   listScenesForProject,
   openDatabase,
   dismissIssue,
+  undoDismissIssue,
   resolveIssue,
   touchProject,
   logEvent,
@@ -45,11 +46,20 @@ import { runExtractionStage } from "./pipeline/stages/extraction";
 import { runContinuityStage } from "./pipeline/stages/continuity";
 import { runContinuityChecks } from "./pipeline/continuity";
 import path from "node:path";
+import { createRequire } from "node:module";
 
 export type WorkerStatus = {
   state: "idle" | "busy";
   lastJob?: string;
   queueDepth?: number;
+};
+
+export type SystemHealthCheck = {
+  ipc: "ok" | "down";
+  worker: "ok" | "down";
+  sqlite: "ok" | "missing_native" | "error";
+  writable: "ok" | "error";
+  details: string[];
 };
 
 let status: WorkerStatus = { state: "idle" };
@@ -64,6 +74,7 @@ type WorkerSession = {
 };
 let session: WorkerSession | null = null;
 const debounceTimers = new Map<string, NodeJS.Timeout>();
+const requireFromEsm = createRequire(import.meta.url);
 
 function setStatus(next: WorkerStatus): void {
   status = next;
@@ -71,6 +82,53 @@ function setStatus(next: WorkerStatus): void {
 
 function getStatus(): WorkerStatus {
   return status;
+}
+
+function runSystemHealthCheck(): SystemHealthCheck {
+  const details: string[] = [];
+
+  const ipc: "ok" | "down" = process.send ? "ok" : "down";
+  if (ipc === "down") {
+    details.push("Worker IPC channel is unavailable.");
+  }
+
+  let sqlite: "ok" | "missing_native" | "error" = "ok";
+  try {
+    const BetterSqlite = requireFromEsm("better-sqlite3") as {
+      new (filename: string): { close: () => void };
+    };
+    const testDb = new BetterSqlite(":memory:");
+    testDb.close();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown sqlite error";
+    if (message.includes("NODE_MODULE_VERSION") || message.includes("better_sqlite3.node")) {
+      sqlite = "missing_native";
+      details.push(
+        "SQLite native module mismatch. Reinstall dependencies for this runtime with `bun install` (or `npm rebuild better-sqlite3`)."
+      );
+    } else {
+      sqlite = "error";
+      details.push(`SQLite check failed: ${message}`);
+    }
+  }
+
+  const writableTarget = currentProjectRoot ?? process.cwd();
+  let writable: "ok" | "error" = "ok";
+  try {
+    fs.accessSync(writableTarget, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (error) {
+    writable = "error";
+    const message = error instanceof Error ? error.message : "Unknown filesystem error";
+    details.push(`Cannot write to ${writableTarget}: ${message}`);
+  }
+
+  return {
+    ipc,
+    worker: "ok",
+    sqlite,
+    writable,
+    details
+  };
 }
 
 async function teardownSession(): Promise<void> {
@@ -443,6 +501,14 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
         projectId: currentProjectId,
         queueDepth: session ? getQueueDepth(session.handle.db) : 0
       };
+    case "project.subscribeStatus":
+      return {
+        ...getStatus(),
+        projectId: currentProjectId,
+        queueDepth: session ? getQueueDepth(session.handle.db) : 0
+      };
+    case "system.healthCheck":
+      return runSystemHealthCheck();
     case "project.getProcessingState":
       if (!session || !currentProjectId) {
         throw new Error("Project not initialized");
@@ -554,7 +620,27 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
       if (!session || !currentProjectId) {
         throw new Error("Project not initialized");
       }
-      dismissIssue(session.handle.db, (params as { issueId: string }).issueId);
+      {
+        const payload = params as { issueId: string; reason?: string };
+        dismissIssue(session.handle.db, payload.issueId);
+        if (payload.reason && payload.reason.trim().length > 0) {
+          logEvent(session.handle.db, {
+            projectId: currentProjectId,
+            level: "info",
+            eventType: "issue_dismissed",
+            payload: { issueId: payload.issueId, reason: payload.reason.trim() }
+          });
+        }
+      }
+      return { ok: true };
+    case "issues.undoDismiss":
+      if (!params || typeof params !== "object") {
+        throw new Error("Missing params for issues.undoDismiss");
+      }
+      if (!session || !currentProjectId) {
+        throw new Error("Project not initialized");
+      }
+      undoDismissIssue(session.handle.db, (params as { issueId: string }).issueId);
       return { ok: true };
     case "issues.resolve":
       if (!params || typeof params !== "object") {
@@ -619,10 +705,26 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
         throw new Error("Project not initialized");
       }
       {
+        const startedAt = Date.now();
         const { outDir, kind } = params as { outDir: string; kind?: "md" | "json" };
-        exportProject(session.handle.db, currentProjectId, outDir, kind ?? "all");
+        const effectiveKind = kind ?? "all";
+        try {
+          exportProject(session.handle.db, currentProjectId, outDir, effectiveKind);
+          const fileCandidates =
+            effectiveKind === "md"
+              ? ["bible.md", "scenes.md", "style_report.md"]
+              : effectiveKind === "json"
+                ? ["project.json"]
+                : ["bible.md", "scenes.md", "style_report.md", "project.json"];
+          const files = fileCandidates
+            .map((name) => path.join(outDir, name))
+            .filter((candidate) => fs.existsSync(candidate));
+          return { ok: true, files, elapsedMs: Date.now() - startedAt };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Export failed";
+          return { ok: false, error: message };
+        }
       }
-      return { ok: true };
     default:
       throw new Error(`Unknown method: ${method}`);
   }
@@ -643,13 +745,21 @@ process.on("message", async (message: RpcRequest) => {
   }
 
   const response: RpcResponse = { id };
+  const shouldTrackRpcAsBusy =
+    method !== "project.getStatus" && method !== "project.subscribeStatus";
 
   try {
-    setStatus({ state: "busy", lastJob: method });
+    if (shouldTrackRpcAsBusy) {
+      setStatus({ state: "busy", lastJob: method });
+    }
     response.result = await dispatch(method as WorkerMethods, params);
-    setStatus({ state: "idle", lastJob: method });
+    if (shouldTrackRpcAsBusy) {
+      setStatus({ state: "idle", lastJob: method });
+    }
   } catch (error) {
-    setStatus({ state: "idle", lastJob: method });
+    if (shouldTrackRpcAsBusy) {
+      setStatus({ state: "idle", lastJob: method });
+    }
     response.error = { message: error instanceof Error ? error.message : "Unknown error" };
   }
 
