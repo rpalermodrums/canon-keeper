@@ -1,0 +1,188 @@
+{
+  "snapshots": [
+    {
+      "id": "593a9257-78ea-4228-be85-fe658cf15fbf",
+      "document_id": "191e2f9b-5b4b-47ba-88da-7767b6371863",
+      "document_path": "/tmp/canonkeeper-journey-C7QvWc/contradiction.md",
+      "version": 1,
+      "created_at": 1770351693382
+    },
+    {
+      "id": "b9edc711-0d3b-4187-822d-6acc3fbb6512",
+      "document_id": "3e9121f6-6dc6-4a7d-9086-7d06f4ca6c52",
+      "document_path": "/tmp/canonkeeper-journey-C7QvWc/simple_md.md",
+      "version": 1,
+      "created_at": 1770351693101
+    }
+  ],
+  "events": [
+    {
+      "id": "b555ab5e-4758-46ea-ba17-b10f57262bfe",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693415,
+      "level": "warn",
+      "event_type": "fts_query_failed",
+      "payload_json": "{\"query\":\"What color are Mira's eyes?\",\"message\":\"fts5: syntax error near \\\"'\\\"\"}"
+    },
+    {
+      "id": "4be6b8c4-7c6d-4b1b-b9ae-97029abd2ce4",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693400,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_CONTINUITY\"}"
+    },
+    {
+      "id": "9f590d75-f6d3-4ee4-b89a-e3e49a481023",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693399,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_EXTRACTION\"}"
+    },
+    {
+      "id": "8dbb4ff0-6dda-4842-b406-3fa6d076940c",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693399,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_CONTINUITY\"}"
+    },
+    {
+      "id": "9f1776e2-19dd-4354-88d7-30bcc0422265",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693396,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_STYLE\"}"
+    },
+    {
+      "id": "0d890aaa-6c9d-4c07-8ad7-027844aff3c5",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693396,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_EXTRACTION\"}"
+    },
+    {
+      "id": "ede6bed1-0b68-4e51-8f74-7e21c6fc7d99",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693391,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_SCENES\"}"
+    },
+    {
+      "id": "407a93af-c8f4-43c5-bacb-ad88c676057e",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693391,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_STYLE\"}"
+    },
+    {
+      "id": "18c653ed-f6b0-47e3-9828-a04afe352e7a",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693384,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_SCENES\"}"
+    },
+    {
+      "id": "24ffdb35-68af-4e3b-ae87-7078c98886f1",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693383,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"INGEST_DOCUMENT\"}"
+    },
+    {
+      "id": "bf018c39-a3fb-4f46-8f27-3d610ab8c4dd",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693380,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"INGEST_DOCUMENT\"}"
+    },
+    {
+      "id": "0de58823-6a91-413d-ab5f-c7bbdaddb18d",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693124,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_CONTINUITY\"}"
+    },
+    {
+      "id": "2865539a-5fa0-42c4-a564-ee07523216e2",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693123,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_EXTRACTION\"}"
+    },
+    {
+      "id": "8d0bb7ca-c423-4cb7-9cb7-3c7b3bc7d5ac",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693123,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_CONTINUITY\"}"
+    },
+    {
+      "id": "fdd877a4-cad2-43a6-b9a3-4e14b1db6674",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693122,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_EXTRACTION\"}"
+    },
+    {
+      "id": "0ced29a0-7489-4d76-b098-5635d6dbb099",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693121,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_STYLE\"}"
+    },
+    {
+      "id": "86184332-0b35-41e6-9170-9f9153a0df58",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693113,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"RUN_SCENES\"}"
+    },
+    {
+      "id": "4a01ce16-8936-43e2-9f93-b33b31bf9884",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693113,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_STYLE\"}"
+    },
+    {
+      "id": "17656d24-835c-4a5a-b620-117d09415645",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693107,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"RUN_SCENES\"}"
+    },
+    {
+      "id": "e8293e5f-1ca1-4e1a-825e-684eb94d0156",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693106,
+      "level": "info",
+      "event_type": "job_finished",
+      "payload_json": "{\"type\":\"INGEST_DOCUMENT\"}"
+    },
+    {
+      "id": "424e1b13-dbeb-407e-ba42-b9e5a9e01471",
+      "project_id": "b0204935-9403-4b31-a264-90af0d759484",
+      "ts": 1770351693097,
+      "level": "info",
+      "event_type": "job_started",
+      "payload_json": "{\"type\":\"INGEST_DOCUMENT\"}"
+    }
+  ]
+}
