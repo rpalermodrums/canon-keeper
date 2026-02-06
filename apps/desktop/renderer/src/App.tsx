@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   addDocument,
   askQuestion,
   confirmClaim,
   createOrOpenProject,
+  getBundledFixturePath,
+  getProcessingState,
+  getProjectHistory,
   getWorkerStatus,
   getEntity,
   getScene,
@@ -12,7 +15,11 @@ import {
   listIssues,
   listScenes,
   dismissIssue,
+  resolveIssue,
   querySearch,
+  pickDocumentPath,
+  pickExportDirPath,
+  pickProjectRoot,
   runExport,
   type AskResponse,
   type IngestResult,
@@ -31,6 +38,34 @@ export function App(): JSX.Element {
   const [rootPath, setRootPath] = useState("");
   const [docPath, setDocPath] = useState("");
   const [status, setStatus] = useState<WorkerStatus | null>(null);
+  const [processingState, setProcessingState] = useState<
+    Array<{
+      document_id: string;
+      snapshot_id: string;
+      stage: string;
+      status: string;
+      error: string | null;
+      updated_at: number;
+      document_path: string;
+    }>
+  >([]);
+  const [history, setHistory] = useState<{
+    snapshots: Array<{
+      id: string;
+      document_id: string;
+      document_path: string;
+      version: number;
+      created_at: number;
+    }>;
+    events: Array<{
+      id: string;
+      project_id: string;
+      ts: number;
+      level: "info" | "warn" | "error";
+      event_type: string;
+      payload_json: string;
+    }>;
+  } | null>(null);
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [lastIngest, setLastIngest] = useState<IngestResult | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -47,8 +82,12 @@ export function App(): JSX.Element {
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [entityDetail, setEntityDetail] = useState<EntityDetail | null>(null);
   const [exportDir, setExportDir] = useState("");
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "setup" | "search" | "scenes" | "issues" | "style" | "bible" | "export"
+  >("dashboard");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const lastWorkerState = useRef<"idle" | "busy" | "unknown">("unknown");
 
   useEffect(() => {
     let active = true;
@@ -56,10 +95,23 @@ export function App(): JSX.Element {
       try {
         const next = await getWorkerStatus();
         if (active) {
+          const becameIdle = lastWorkerState.current === "busy" && next.state === "idle";
+          lastWorkerState.current = next.state;
           setStatus(next);
+          if (project && becameIdle) {
+            void Promise.all([
+              refreshScenes(),
+              refreshIssues(),
+              refreshStyle(),
+              refreshEntities(),
+              getProcessingState().then(setProcessingState),
+              getProjectHistory().then(setHistory)
+            ]);
+          }
         }
       } catch (err) {
         if (active) {
+          lastWorkerState.current = "unknown";
           setStatus(null);
         }
       }
@@ -71,7 +123,7 @@ export function App(): JSX.Element {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [project]);
 
   const statusLabel = useMemo(() => {
     if (!status) return "disconnected";
@@ -84,10 +136,24 @@ export function App(): JSX.Element {
     try {
       const created = await createOrOpenProject({ rootPath: rootPath.trim() });
       setProject(created);
+      const [state, nextHistory] = await Promise.all([getProcessingState(), getProjectHistory()]);
+      setProcessingState(state);
+      setHistory(nextHistory);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onPickProjectRoot = async () => {
+    try {
+      const selected = await pickProjectRoot();
+      if (selected) {
+        setRootPath(selected);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pick project path");
     }
   };
 
@@ -97,10 +163,37 @@ export function App(): JSX.Element {
     try {
       const result = await addDocument({ path: docPath.trim() });
       setLastIngest(result);
+      const [state, nextHistory] = await Promise.all([getProcessingState(), getProjectHistory()]);
+      setProcessingState(state);
+      setHistory(nextHistory);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to ingest document");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onPickDocument = async () => {
+    try {
+      const selected = await pickDocumentPath();
+      if (selected) {
+        setDocPath(selected);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pick document path");
+    }
+  };
+
+  const onUseFixture = async () => {
+    try {
+      const fixturePath = await getBundledFixturePath();
+      if (fixturePath) {
+        setDocPath(fixturePath);
+      } else {
+        setError("Bundled fixture not found");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load fixture path");
     }
   };
 
@@ -175,6 +268,16 @@ export function App(): JSX.Element {
     }
   };
 
+  const handleResolveIssue = async (issueId: string) => {
+    setError(null);
+    try {
+      await resolveIssue(issueId);
+      await refreshIssues();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resolve issue");
+    }
+  };
+
   const refreshStyle = async () => {
     setError(null);
     try {
@@ -244,10 +347,32 @@ export function App(): JSX.Element {
     }
   };
 
+  const onPickExportDir = async () => {
+    try {
+      const selected = await pickExportDirPath();
+      if (selected) {
+        setExportDir(selected);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pick export path");
+    }
+  };
+
   return (
     <main style={{ padding: 24, fontFamily: "system-ui, sans-serif", maxWidth: 960 }}>
       <h1>CanonKeeper Dashboard</h1>
+      <nav style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setActiveTab("dashboard")}>Dashboard</button>
+        <button onClick={() => setActiveTab("setup")}>Setup</button>
+        <button onClick={() => setActiveTab("search")}>Search</button>
+        <button onClick={() => setActiveTab("scenes")}>Scenes</button>
+        <button onClick={() => setActiveTab("issues")}>Issues</button>
+        <button onClick={() => setActiveTab("style")}>Style</button>
+        <button onClick={() => setActiveTab("bible")}>Bible</button>
+        <button onClick={() => setActiveTab("export")}>Export</button>
+      </nav>
 
+      {activeTab === "dashboard" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Status</h2>
         <p>
@@ -274,8 +399,36 @@ export function App(): JSX.Element {
         ) : (
           <p>No ingestion results yet.</p>
         )}
+        {processingState.length > 0 ? (
+          <div>
+            <h3>Pipeline State</h3>
+            <ul>
+              {processingState.map((row) => (
+                <li key={`${row.document_id}-${row.stage}`}>
+                  {row.document_path} · {row.stage} · {row.status}
+                  {row.error ? ` · ${row.error}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {history ? (
+          <div>
+            <h3>Recent History</h3>
+            <p>Snapshots: {history.snapshots.length} · Events: {history.events.length}</p>
+            <ul>
+              {history.events.slice(0, 10).map((event) => (
+                <li key={event.id}>
+                  {new Date(event.ts).toLocaleString()} · {event.level} · {event.event_type}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
+      ) : null}
 
+      {activeTab === "setup" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Project Setup</h2>
         <label style={{ display: "block", marginBottom: 8 }}>
@@ -290,8 +443,13 @@ export function App(): JSX.Element {
         <button onClick={onCreateProject} disabled={busy || rootPath.trim().length === 0}>
           Create / Open Project
         </button>
+        <button onClick={onPickProjectRoot} disabled={busy} style={{ marginLeft: 8 }}>
+          Browse…
+        </button>
       </section>
+      ) : null}
 
+      {activeTab === "setup" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Ingest Document</h2>
         <label style={{ display: "block", marginBottom: 8 }}>
@@ -306,8 +464,16 @@ export function App(): JSX.Element {
         <button onClick={onAddDocument} disabled={busy || docPath.trim().length === 0}>
           Add Document
         </button>
+        <button onClick={onPickDocument} disabled={busy} style={{ marginLeft: 8 }}>
+          Browse…
+        </button>
+        <button onClick={onUseFixture} disabled={busy} style={{ marginLeft: 8 }}>
+          Use Fixture
+        </button>
       </section>
+      ) : null}
 
+      {activeTab === "search" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Search</h2>
         <label style={{ display: "block", marginBottom: 8 }}>
@@ -340,7 +506,9 @@ export function App(): JSX.Element {
           </div>
         ) : null}
       </section>
+      ) : null}
 
+      {activeTab === "search" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Ask the Bible</h2>
         <label style={{ display: "block", marginBottom: 8 }}>
@@ -380,7 +548,9 @@ export function App(): JSX.Element {
           </div>
         ) : null}
       </section>
+      ) : null}
 
+      {activeTab === "scenes" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Scenes</h2>
         <button onClick={refreshScenes} disabled={busy}>
@@ -443,6 +613,9 @@ export function App(): JSX.Element {
                 {sceneDetail.evidence.map((evidence, index) => (
                   <li key={`${sceneDetail.scene.id}-e-${index}`}>
                     {evidence.documentPath ?? "unknown"} · chunk {evidence.chunkOrdinal ?? "?"}
+                    {evidence.lineStart !== null
+                      ? ` · line ${evidence.lineStart}${evidence.lineEnd && evidence.lineEnd !== evidence.lineStart ? `-${evidence.lineEnd}` : ""}`
+                      : ""}
                     <div style={{ fontStyle: "italic" }}>{evidence.excerpt}</div>
                   </li>
                 ))}
@@ -453,7 +626,9 @@ export function App(): JSX.Element {
           </div>
         ) : null}
       </section>
+      ) : null}
 
+      {activeTab === "issues" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Issues</h2>
         <button onClick={refreshIssues} disabled={busy}>
@@ -474,6 +649,9 @@ export function App(): JSX.Element {
                       <li key={`${issue.id}-${index}`}>
                         {evidence.documentPath ?? "unknown"} · chunk{" "}
                         {evidence.chunkOrdinal ?? "?"}
+                        {evidence.lineStart !== null
+                          ? ` · line ${evidence.lineStart}${evidence.lineEnd && evidence.lineEnd !== evidence.lineStart ? `-${evidence.lineEnd}` : ""}`
+                          : ""}
                         <div style={{ fontStyle: "italic" }}>{evidence.excerpt}</div>
                       </li>
                     ))}
@@ -482,12 +660,17 @@ export function App(): JSX.Element {
                 <button onClick={() => handleDismissIssue(issue.id)} disabled={busy}>
                   Dismiss
                 </button>
+                <button onClick={() => handleResolveIssue(issue.id)} disabled={busy}>
+                  Resolve
+                </button>
               </li>
             ))}
           </ul>
         )}
       </section>
+      ) : null}
 
+      {activeTab === "style" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Style</h2>
         <button onClick={refreshStyle} disabled={busy}>
@@ -571,7 +754,9 @@ export function App(): JSX.Element {
           <p>No style report loaded.</p>
         )}
       </section>
+      ) : null}
 
+      {activeTab === "bible" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Bible</h2>
         <button onClick={refreshEntities} disabled={busy}>
@@ -615,7 +800,7 @@ export function App(): JSX.Element {
                               claim.claim.id
                             )
                           }
-                          disabled={busy}
+                          disabled={busy || claim.evidence.length === 0}
                         >
                           Confirm
                         </button>
@@ -627,6 +812,9 @@ export function App(): JSX.Element {
                           <li key={`${claim.claim.id}-${index}`}>
                             {evidence.documentPath ?? "unknown"} · chunk{" "}
                             {evidence.chunkOrdinal ?? "?"}
+                            {evidence.lineStart !== null
+                              ? ` · line ${evidence.lineStart}${evidence.lineEnd && evidence.lineEnd !== evidence.lineStart ? `-${evidence.lineEnd}` : ""}`
+                              : ""}
                             <div style={{ fontStyle: "italic" }}>{evidence.excerpt}</div>
                           </li>
                         ))}
@@ -641,7 +829,9 @@ export function App(): JSX.Element {
           <p>No entity selected.</p>
         )}
       </section>
+      ) : null}
 
+      {activeTab === "export" ? (
       <section style={{ marginBottom: 24 }}>
         <h2>Export</h2>
         <label style={{ display: "block", marginBottom: 8 }}>
@@ -656,7 +846,11 @@ export function App(): JSX.Element {
         <button onClick={handleExport} disabled={busy || exportDir.trim().length === 0}>
           Run Export
         </button>
+        <button onClick={onPickExportDir} disabled={busy} style={{ marginLeft: 8 }}>
+          Browse…
+        </button>
       </section>
+      ) : null}
 
       {error ? (
         <section>

@@ -2,11 +2,18 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("canonkeeper", {
   ping: async () => ipcRenderer.invoke("app:ping"),
+  getFixturePath: async () => ipcRenderer.invoke("app:getFixturePath"),
+  dialog: {
+    pickProjectRoot: async () => ipcRenderer.invoke("dialog:pickProjectRoot"),
+    pickDocument: async () => ipcRenderer.invoke("dialog:pickDocument"),
+    pickExportDir: async () => ipcRenderer.invoke("dialog:pickExportDir")
+  },
   project: {
     createOrOpen: async (payload: { rootPath: string; name?: string }) =>
       ipcRenderer.invoke("project:createOrOpen", payload),
     getStatus: async () => ipcRenderer.invoke("project:getStatus"),
     getProcessingState: async () => ipcRenderer.invoke("project:getProcessingState"),
+    getHistory: async () => ipcRenderer.invoke("project:getHistory"),
     addDocument: async (payload: { path: string }) =>
       ipcRenderer.invoke("project:addDocument", payload)
   },
@@ -19,8 +26,14 @@ contextBridge.exposeInMainWorld("canonkeeper", {
     get: async (payload: { sceneId: string }) => ipcRenderer.invoke("scenes:get", payload)
   },
   issues: {
-    list: async () => ipcRenderer.invoke("issues:list"),
-    dismiss: async (payload: { issueId: string }) => ipcRenderer.invoke("issues:dismiss", payload)
+    list: async (payload?: {
+      status?: "open" | "dismissed" | "resolved" | "all";
+      type?: string;
+      severity?: "low" | "medium" | "high";
+    }) =>
+      payload ? ipcRenderer.invoke("issues:listFiltered", payload) : ipcRenderer.invoke("issues:list"),
+    dismiss: async (payload: { issueId: string }) => ipcRenderer.invoke("issues:dismiss", payload),
+    resolve: async (payload: { issueId: string }) => ipcRenderer.invoke("issues:resolve", payload)
   },
   style: {
     getReport: async () => ipcRenderer.invoke("style:getReport")
@@ -30,8 +43,12 @@ contextBridge.exposeInMainWorld("canonkeeper", {
     getEntity: async (payload: { entityId: string }) => ipcRenderer.invoke("bible:getEntity", payload)
   },
   canon: {
-    confirmClaim: async (payload: { entityId: string; field: string; valueJson: string }) =>
-      ipcRenderer.invoke("canon:confirmClaim", payload)
+    confirmClaim: async (payload: {
+      entityId: string;
+      field: string;
+      valueJson: string;
+      sourceClaimId: string;
+    }) => ipcRenderer.invoke("canon:confirmClaim", payload)
   },
   export: {
     run: async (payload: { outDir: string; kind?: "md" | "json" }) =>

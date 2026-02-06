@@ -4,6 +4,12 @@ declare global {
   interface Window {
     canonkeeper?: {
       ping: () => Promise<{ ok: boolean }>;
+      getFixturePath: () => Promise<string | null>;
+      dialog: {
+        pickProjectRoot: () => Promise<string | null>;
+        pickDocument: () => Promise<string | null>;
+        pickExportDir: () => Promise<string | null>;
+      };
       project: {
         createOrOpen: (payload: { rootPath: string; name?: string }) => Promise<{
           id: string;
@@ -31,6 +37,23 @@ declare global {
             document_path: string;
           }>
         >;
+        getHistory: () => Promise<{
+          snapshots: Array<{
+            id: string;
+            document_id: string;
+            document_path: string;
+            version: number;
+            created_at: number;
+          }>;
+          events: Array<{
+            id: string;
+            project_id: string;
+            ts: number;
+            level: "info" | "warn" | "error";
+            event_type: string;
+            payload_json: string;
+          }>;
+        }>;
         addDocument: (payload: { path: string }) => Promise<{
           documentId: string;
           snapshotId: string;
@@ -44,7 +67,7 @@ declare global {
       };
       search: {
         ask: (payload: { question: string }) => Promise<{
-          answerType: "cited" | "not_found" | "snippets";
+          answerType: "not_found" | "snippets";
           answer: string;
           confidence: number;
           citations: Array<{ chunkId: string; quoteStart: number; quoteEnd: number }>;
@@ -119,11 +142,17 @@ declare global {
             quoteStart: number;
             quoteEnd: number;
             excerpt: string;
+            lineStart: number | null;
+            lineEnd: number | null;
           }>;
         }>;
       };
       issues: {
-        list: () => Promise<
+        list: (payload?: {
+          status?: "open" | "dismissed" | "resolved" | "all";
+          type?: string;
+          severity?: "low" | "medium" | "high";
+        }) => Promise<
           Array<{
             id: string;
             project_id: string;
@@ -141,10 +170,13 @@ declare global {
               quoteStart: number;
               quoteEnd: number;
               excerpt: string;
+              lineStart: number | null;
+              lineEnd: number | null;
             }>;
           }>
         >;
         dismiss: (payload: { issueId: string }) => Promise<{ ok: boolean }>;
+        resolve: (payload: { issueId: string }) => Promise<{ ok: boolean }>;
       };
       style: {
         getReport: () => Promise<{
@@ -195,6 +227,8 @@ declare global {
               quoteStart: number;
               quoteEnd: number;
               excerpt: string;
+              lineStart: number | null;
+              lineEnd: number | null;
             }>;
           }>;
         }>;
@@ -204,7 +238,7 @@ declare global {
           entityId: string;
           field: string;
           valueJson: string;
-          sourceClaimId?: string;
+          sourceClaimId: string;
         }) => Promise<string>;
       };
       export: {

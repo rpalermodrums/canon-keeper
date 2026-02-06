@@ -43,7 +43,7 @@ export type SearchQueryResponse = {
 };
 
 export type AskResponse = {
-  answerType: "cited" | "not_found" | "snippets";
+  answerType: "not_found" | "snippets";
   answer: string;
   confidence: number;
   citations: Array<{ chunkId: string; quoteStart: number; quoteEnd: number }>;
@@ -82,6 +82,8 @@ export type SceneDetail = {
     quoteStart: number;
     quoteEnd: number;
     excerpt: string;
+    lineStart: number | null;
+    lineEnd: number | null;
   }>;
 };
 
@@ -102,6 +104,8 @@ export type IssueSummary = {
     quoteStart: number;
     quoteEnd: number;
     excerpt: string;
+    lineStart: number | null;
+    lineEnd: number | null;
   }>;
 };
 
@@ -143,6 +147,8 @@ export type EntityDetail = {
       quoteStart: number;
       quoteEnd: number;
       excerpt: string;
+      lineStart: number | null;
+      lineEnd: number | null;
     }>;
   }>;
 };
@@ -152,6 +158,34 @@ export async function ping(): Promise<PingResponse> {
     return { ok: false };
   }
   return window.canonkeeper.ping();
+}
+
+export async function getBundledFixturePath(): Promise<string | null> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.getFixturePath();
+}
+
+export async function pickProjectRoot(): Promise<string | null> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.dialog.pickProjectRoot();
+}
+
+export async function pickDocumentPath(): Promise<string | null> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.dialog.pickDocument();
+}
+
+export async function pickExportDirPath(): Promise<string | null> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.dialog.pickExportDir();
 }
 
 export async function createOrOpenProject(payload: {
@@ -186,6 +220,29 @@ export async function getProcessingState(): Promise<
     throw new Error("IPC not available");
   }
   return window.canonkeeper.project.getProcessingState();
+}
+
+export async function getProjectHistory(): Promise<{
+  snapshots: Array<{
+    id: string;
+    document_id: string;
+    document_path: string;
+    version: number;
+    created_at: number;
+  }>;
+  events: Array<{
+    id: string;
+    project_id: string;
+    ts: number;
+    level: "info" | "warn" | "error";
+    event_type: string;
+    payload_json: string;
+  }>;
+}> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.project.getHistory();
 }
 
 export async function addDocument(payload: { path: string }): Promise<IngestResult> {
@@ -223,11 +280,15 @@ export async function getScene(sceneId: string): Promise<SceneDetail | null> {
   return window.canonkeeper.scenes.get({ sceneId });
 }
 
-export async function listIssues(): Promise<IssueSummary[]> {
+export async function listIssues(payload?: {
+  status?: "open" | "dismissed" | "resolved" | "all";
+  type?: string;
+  severity?: "low" | "medium" | "high";
+}): Promise<IssueSummary[]> {
   if (!window.canonkeeper) {
     throw new Error("IPC not available");
   }
-  return window.canonkeeper.issues.list();
+  return window.canonkeeper.issues.list(payload);
 }
 
 export async function dismissIssue(issueId: string): Promise<{ ok: boolean }> {
@@ -235,6 +296,13 @@ export async function dismissIssue(issueId: string): Promise<{ ok: boolean }> {
     throw new Error("IPC not available");
   }
   return window.canonkeeper.issues.dismiss({ issueId });
+}
+
+export async function resolveIssue(issueId: string): Promise<{ ok: boolean }> {
+  if (!window.canonkeeper) {
+    throw new Error("IPC not available");
+  }
+  return window.canonkeeper.issues.resolve({ issueId });
 }
 
 export async function getStyleReport(): Promise<StyleReport> {
@@ -262,7 +330,7 @@ export async function confirmClaim(payload: {
   entityId: string;
   field: string;
   valueJson: string;
-  sourceClaimId?: string;
+  sourceClaimId: string;
 }): Promise<string> {
   if (!window.canonkeeper) {
     throw new Error("IPC not available");

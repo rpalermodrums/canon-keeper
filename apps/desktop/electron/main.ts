@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -48,6 +48,38 @@ app.whenReady().then(() => {
   createWindow();
 
   ipcMain.handle("app:ping", () => ({ ok: true }));
+  ipcMain.handle("app:getFixturePath", () => {
+    const fixturePath = path.join(process.cwd(), "data", "fixtures", "simple_md.md");
+    return fs.existsSync(fixturePath) ? fixturePath : null;
+  });
+  ipcMain.handle("dialog:pickProjectRoot", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory", "createDirectory"]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0] ?? null;
+  });
+  ipcMain.handle("dialog:pickDocument", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [{ name: "Manuscripts", extensions: ["md", "txt", "docx"] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0] ?? null;
+  });
+  ipcMain.handle("dialog:pickExportDir", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openDirectory", "createDirectory"]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0] ?? null;
+  });
   ipcMain.handle("project:createOrOpen", async (_event, payload) => {
     if (!workerClient) {
       throw new Error("Worker not initialized");
@@ -81,6 +113,12 @@ app.whenReady().then(() => {
       throw new Error("Worker not initialized");
     }
     return workerClient.request("project.getProcessingState");
+  });
+  ipcMain.handle("project:getHistory", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("project.getHistory");
   });
   ipcMain.handle("project:addDocument", async (_event, payload) => {
     if (!workerClient) {
@@ -118,11 +156,23 @@ app.whenReady().then(() => {
     }
     return workerClient.request("issues.list");
   });
+  ipcMain.handle("issues:listFiltered", async (_event, payload) => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("issues.list", payload);
+  });
   ipcMain.handle("issues:dismiss", async (_event, payload) => {
     if (!workerClient) {
       throw new Error("Worker not initialized");
     }
     return workerClient.request("issues.dismiss", payload);
+  });
+  ipcMain.handle("issues:resolve", async (_event, payload) => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("issues.resolve", payload);
   });
   ipcMain.handle("style:getReport", async () => {
     if (!workerClient) {
