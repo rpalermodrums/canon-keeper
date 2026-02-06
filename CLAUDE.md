@@ -82,6 +82,10 @@ data/fixtures/       # Test manuscripts
 
 `project.*`, `system.*`, `search.*`, `scenes.*`, `issues.*`, `style.*`, `bible.*`, `canon.*`, `export.*` — defined in `worker/rpc.ts`, dispatched in `worker/worker.ts`.
 
+### Detailed architecture
+
+For comprehensive module-by-module documentation, data flows, and navigation guides, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
+
 ## Non-negotiable constraints
 
 1. **Never edit user manuscripts** — read-only ingestion only
