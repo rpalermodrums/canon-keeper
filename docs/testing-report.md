@@ -125,7 +125,7 @@ No `P0` or `P1` product correctness violations were observed in this pass.
 ## 7. Recommended Next Actions
 1. Escape/sanitize Ask/FTS queries before the primary SQL `MATCH` execution path to remove apostrophe-triggered warning events.
 2. Run the Playwright journey once network access to `registry.npmjs.org` is available (or vendor a local Playwright CLI dependency).
-3. Align local Node runtime to `20.x` (or rebuild native deps appropriately) so `test:local` can match dockerized CI behavior.
+3. Rebuild native dependencies (`better-sqlite3`) for the active local runtime so `test:local` can match dockerized CI behavior.
 4. Execute Layer 4 manual Electron smoke and append outcomes to this report.
 
 ## 8. Phase C/D Continuation (UTC 2026-02-06T07:05:47Z)

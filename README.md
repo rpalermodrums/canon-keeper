@@ -48,7 +48,7 @@ canonkeeper/
 ### Requirements
 - Docker Engine + Docker Compose plugin + Buildx
 - Bun (for local non-container fallback)
-- Node 20 (for local non-container fallback)
+- Node 25 (for local non-container fallback)
 
 ### Install
 ```bash

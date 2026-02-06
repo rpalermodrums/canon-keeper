@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20 <21"
+    "node": ">=25 <26"
   },
   "scripts": {
     "dev": "docker buildx bake dev --load && docker compose up dev",
@@ -21,7 +21,7 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "test": "docker buildx bake test --load && docker compose run --rm test",
-    "test:local": "vitest run",
+    "test:local": "node ./node_modules/vitest/vitest.mjs run",
     "typecheck": "docker buildx bake typecheck --load && docker compose run --rm typecheck",
     "typecheck:local": "bun run --cwd apps/desktop typecheck && bun run --cwd packages/shared typecheck",
     "docker:bake": "docker buildx bake",
@@ -30,11 +30,12 @@
     "docker:typecheck": "docker compose run --rm typecheck",
     "docker:test": "docker compose run --rm test",
     "docker:build": "docker compose run --rm build",
+    "postinstall": "node scripts/repair-workspace-links.mjs",
     "prepare": "if [ -d .git ]; then lefthook install; else echo 'Skipping lefthook install (no .git)'; fi"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20.11.30",
+    "@types/node": "^25.2.1",
     "@typescript-eslint/eslint-plugin": "^7.4.0",
     "@typescript-eslint/parser": "^7.4.0",
     "eslint": "^8.57.0",
@@ -43,6 +44,6 @@
     "lefthook": "^1.6.6",
     "prettier": "^3.2.5",
     "typescript": "^5.5.4",
-    "vitest": "^4.0.18"
+    "vitest": "^1.6.1"
   }
 }

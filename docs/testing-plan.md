@@ -20,10 +20,10 @@ This document is the execution guide for validating CanonKeeper as close as poss
   - Docker Buildx
   - Bun (`bun@1.2.23`)
 - Required only for local non-container fallback:
-  - Node `20.x`
+  - Node `25.x`
 - Note:
-  - Tests enforce Node 20 by default.
-  - In constrained environments only, use `CANONKEEPER_ALLOW_UNSUPPORTED_NODE=1` for `test:local`.
+  - `better-sqlite3` is a native module and must be compiled for the runtime executing tests.
+  - If local tests fail with ABI mismatch, rerun `bun install` (or `npm rebuild better-sqlite3`).
 
 ## Fast Runbook (Use This First)
 
@@ -49,7 +49,14 @@ bun run build
 bun run lint:local
 bun run typecheck:local
 bun run build:local
-CANONKEEPER_ALLOW_UNSUPPORTED_NODE=1 bun run test:local
+bun run test:local
+```
+
+If native-module ABI mismatch occurs:
+```bash
+bun install
+# or
+npm rebuild better-sqlite3
 ```
 
 ## Pass/Fail Gates

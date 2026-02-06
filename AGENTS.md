@@ -102,7 +102,7 @@ AGENTS.md
 
 Use:
 - Package manager: **bun**
-- Node: **>= 20**
+- Node: **>= 25**
 - TypeScript: latest stable
 - Lint/format: ESLint + Prettier
 - Tests: Vitest
