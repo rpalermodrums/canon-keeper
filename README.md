@@ -98,7 +98,12 @@ Each project can include `canonkeeper.json` in the project root:
 {
   "projectName": "My Novel",
   "documents": ["draft.md"],
-  "llm": { "provider": "cloud", "model": "default", "enabled": false, "baseUrl": "" },
+  "llm": {
+    "provider": "cloud",
+    "model": "gpt-5.2",
+    "enabled": false,
+    "baseUrl": "https://api.openai.com/v1/responses"
+  },
   "style": {
     "stopwords": "default",
     "repetitionThreshold": { "projectCount": 12, "sceneCount": 3 },
@@ -110,10 +115,17 @@ Each project can include `canonkeeper.json` in the project root:
 When you add a document in the UI, CanonKeeper updates `canonkeeper.json` and begins watching the file.
 
 ## LLM configuration (optional)
-Set these environment variables for LLM use:
+Create a local env file (not committed):
+
+```bash
+cp .env.example .env.local
+```
+
+Then set your key in `.env.local`:
 
 - `CANONKEEPER_LLM_API_KEY`
-- `CANONKEEPER_LLM_BASE_URL` (if you don’t set `llm.baseUrl` in config)
+- `CANONKEEPER_LLM_BASE_URL` (defaults can be set in `canonkeeper.json`)
+- `CANONKEEPER_LLM_MODEL` (defaults to `gpt-5.2`; use this, not `gpt-5.2-codex`)
 
 LLM outputs are schema-validated with retries and evidence span mapping. If evidence cannot be mapped, results are discarded.
 

@@ -23,7 +23,7 @@ function defaultProjectConfig(rootPath: string): ProjectConfig {
     documents: [],
     llm: {
       provider: "null",
-      model: "default",
+      model: "gpt-5.2",
       enabled: false,
       baseUrl: undefined
     },

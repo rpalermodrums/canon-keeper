@@ -370,7 +370,7 @@ describe("worker RPC integration", () => {
           documents: [],
           llm: {
             provider: "cloud",
-            model: "default",
+            model: "gpt-5.2",
             enabled: true
           }
         },

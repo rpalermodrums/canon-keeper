@@ -8,6 +8,7 @@ import { buildSceneMetaUserPrompt, SCENE_META_SYSTEM_PROMPT } from "../llm/promp
 import { CloudProvider, NullProvider, type LLMProvider } from "../llm/provider";
 import { completeJsonWithRetry } from "../llm/validator";
 import { loadProjectConfig } from "../config";
+import { loadLocalEnv } from "../utils/env";
 import {
   deleteSceneEvidenceForScene,
   insertSceneEvidence,
@@ -157,13 +158,18 @@ type SceneMetaOutput = {
 };
 
 function buildProvider(rootPath: string): LLMProvider {
+  loadLocalEnv(rootPath);
   const config = loadProjectConfig(rootPath);
   if (!config.llm.enabled || config.llm.provider === "null") {
     return new NullProvider();
   }
   const apiKey = process.env.CANONKEEPER_LLM_API_KEY ?? "";
   const baseUrl = config.llm.baseUrl ?? process.env.CANONKEEPER_LLM_BASE_URL ?? "";
-  return new CloudProvider(baseUrl, apiKey);
+  const configuredModel = config.llm.model.trim();
+  const model =
+    process.env.CANONKEEPER_LLM_MODEL ??
+    (configuredModel && configuredModel !== "default" ? configuredModel : "gpt-5.2");
+  return new CloudProvider(baseUrl, apiKey, model);
 }
 
 function buildAliasMap(
