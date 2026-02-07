@@ -2,6 +2,7 @@ import { useMemo, useState, type JSX } from "react";
 import { Activity, BookOpen, MessageSquare, Palette, Quote, RefreshCw, Repeat } from "lucide-react";
 import type { EvidenceItem, IssueSummary, StyleReport } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
+import { Skeleton } from "../components/Skeleton";
 import { Spinner } from "../components/Spinner";
 import { TogglePill } from "../components/TogglePill";
 
@@ -22,6 +23,7 @@ type RepetitionEntry = {
 
 type StyleViewProps = {
   busy: boolean;
+  loaded: boolean;
   report: StyleReport | null;
   styleIssues: IssueSummary[];
   onRefresh: () => void;
@@ -41,8 +43,25 @@ const sortOptions = [
   { value: "ngram" as const, label: "Phrase" }
 ];
 
+function StyleSkeleton(): JSX.Element {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-start justify-between">
+        <Skeleton variant="text" width="140px" height="28px" />
+        <Skeleton variant="rect" width="120px" height="36px" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} variant="rect" width="100%" height="160px" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function StyleView({
   busy,
+  loaded,
   report,
   styleIssues,
   onRefresh,
@@ -51,12 +70,18 @@ export function StyleView({
   onNavigateToScene
 }: StyleViewProps): JSX.Element {
   const [sortBy, setSortBy] = useState<"count" | "ngram">("count");
+  const [showAllRepetitions, setShowAllRepetitions] = useState(false);
   const entries = useMemo(() => {
     const base = toRepetitionEntries(report);
     return [...base].sort((a, b) =>
       sortBy === "count" ? b.count - a.count : a.ngram.localeCompare(b.ngram)
     );
   }, [report, sortBy]);
+  const visibleEntries = showAllRepetitions ? entries : entries.slice(0, 20);
+
+  if (!loaded) {
+    return <StyleSkeleton />;
+  }
 
   const maxCount = entries.length > 0 ? Math.max(...entries.map((e) => e.count)) : 1;
   const toneIssues = styleIssues.filter((issue) => issue.type === "tone_drift");
@@ -109,7 +134,7 @@ export function StyleView({
                     </tr>
                   </thead>
                   <tbody>
-                    {entries.slice(0, 20).map((entry) => {
+                    {visibleEntries.map((entry) => {
                       const evidence: EvidenceItem[] = (entry.examples ?? [])
                         .filter((ex): ex is NonNullable<typeof ex> => Boolean(ex))
                         .map((ex) => ({
@@ -150,6 +175,15 @@ export function StyleView({
                     })}
                   </tbody>
                 </table>
+                {entries.length > 20 ? (
+                  <button
+                    type="button"
+                    className="mt-3 self-start text-sm text-accent underline transition-colors hover:text-accent-strong cursor-pointer"
+                    onClick={() => setShowAllRepetitions((prev) => !prev)}
+                  >
+                    {showAllRepetitions ? "Show fewer" : `Showing 20 of ${entries.length} phrases. Show all`}
+                  </button>
+                ) : null}
               </div>
             )}
           </article>

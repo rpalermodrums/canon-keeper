@@ -166,6 +166,7 @@ declare global {
             title: string | null;
             pov_mode: string;
             pov_entity_id: string | null;
+            pov_confidence: number | null;
             setting_entity_id: string | null;
             setting_text: string | null;
           }>
@@ -183,6 +184,7 @@ declare global {
             title: string | null;
             pov_mode: string;
             pov_entity_id: string | null;
+            pov_confidence: number | null;
             setting_entity_id: string | null;
             setting_text: string | null;
           };

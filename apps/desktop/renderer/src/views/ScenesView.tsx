@@ -3,9 +3,11 @@ import { BookOpen, Quote, RefreshCw, Search } from "lucide-react";
 import { Spinner } from "../components/Spinner";
 import type { SceneDetail, SceneSummary } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
+import { Skeleton } from "../components/Skeleton";
 
 type ScenesViewProps = {
   busy: boolean;
+  loaded: boolean;
   scenes: SceneSummary[];
   selectedSceneId: string;
   sceneDetail: SceneDetail | null;
@@ -26,8 +28,33 @@ function unknownReason(scene: SceneSummary): string {
   return "";
 }
 
+function confidenceLabel(value: number | null): string {
+  if (value === null) return "unknown";
+  if (value >= 0.8) return "high";
+  if (value >= 0.5) return "medium";
+  return "low";
+}
+
+function ScenesSkeleton(): JSX.Element {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-start justify-between">
+        <Skeleton variant="text" width="200px" height="28px" />
+        <Skeleton variant="rect" width="100px" height="36px" />
+      </div>
+      <Skeleton variant="rect" width="100%" height="44px" />
+      <div className="flex flex-col gap-1">
+        {Array.from({ length: 5 }, (_, i) => (
+          <Skeleton key={i} variant="rect" width="100%" height="40px" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function ScenesView({
   busy,
+  loaded,
   scenes,
   selectedSceneId,
   sceneDetail,
@@ -37,6 +64,10 @@ export function ScenesView({
   onSelectScene,
   onOpenEvidence
 }: ScenesViewProps): JSX.Element {
+  if (!loaded) {
+    return <ScenesSkeleton />;
+  }
+
   const filtered = scenes.filter((scene) => {
     const haystack = `${scene.ordinal} ${scene.title ?? ""} ${scene.pov_mode} ${scene.setting_text ?? ""}`.toLowerCase();
     return haystack.includes(query.toLowerCase().trim());
@@ -122,7 +153,12 @@ export function ScenesView({
                           {scene.setting_text ?? "unknown"}
                         </span>
                       </td>
-                      <td className="text-xs text-text-muted">{scene.pov_mode === "unknown" ? "low" : "medium"}</td>
+                      <td
+                        className="text-xs text-text-muted"
+                        title={scene.pov_confidence !== null ? `${Math.round(scene.pov_confidence * 100)}%` : undefined}
+                      >
+                        {confidenceLabel(scene.pov_confidence)}
+                      </td>
                     </tr>
                   );
                 })}

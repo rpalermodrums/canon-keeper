@@ -1,9 +1,10 @@
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 import { AlertTriangle, BookOpen, CheckCircle, Quote, RefreshCw, Search, XCircle } from "lucide-react";
 import { Spinner } from "../components/Spinner";
 import type { IssueSummary } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { FilterBar, FilterGroup } from "../components/FilterBar";
+import { Skeleton } from "../components/Skeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { TogglePill } from "../components/TogglePill";
 
@@ -17,6 +18,7 @@ type IssueFilters = {
 
 type IssuesViewProps = {
   busy: boolean;
+  loaded: boolean;
   issues: IssueSummary[];
   selectedIssueId: string;
   filters: IssueFilters;
@@ -69,8 +71,35 @@ const SEVERITY_WEIGHT: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 const STYLE_ISSUE_TYPES = new Set(["repetition", "tone_drift", "dialogue_tic"]);
 
+const relativeTime = (unixMs: number): string => {
+  const seconds = Math.floor((Date.now() - unixMs) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return new Date(unixMs).toLocaleDateString();
+};
+
+function IssuesSkeleton(): JSX.Element {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-start justify-between">
+        <Skeleton variant="text" width="160px" height="28px" />
+        <Skeleton variant="rect" width="120px" height="36px" />
+      </div>
+      <Skeleton variant="rect" width="100%" height="44px" />
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton key={i} variant="rect" width="100%" height="100px" />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function IssuesView({
   busy,
+  loaded,
   issues,
   selectedIssueId,
   filters,
@@ -82,7 +111,12 @@ export function IssuesView({
   onOpenEvidence,
   onNavigateToScene
 }: IssuesViewProps): JSX.Element {
+  const [confirmingResolveId, setConfirmingResolveId] = useState<string | null>(null);
   const isStyleOnly = filters.type === "__style__";
+
+  if (!loaded) {
+    return <IssuesSkeleton />;
+  }
 
   const filtered = issues
     .filter((issue) => {
@@ -217,9 +251,12 @@ export function IssuesView({
                     <strong className="text-sm">{issue.title}</strong>
                     <div className="mt-0.5 text-xs text-text-muted">{issue.description}</div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <StatusBadge label={issue.severity} status={issue.severity} />
-                    <StatusBadge label={issue.status} status={issue.status} />
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <StatusBadge label={issue.severity} status={issue.severity} />
+                      <StatusBadge label={issue.status} status={issue.status} />
+                    </div>
+                    <span className="text-xs text-text-muted">Found {relativeTime(issue.created_at)}</span>
                   </div>
                 </div>
 
@@ -257,15 +294,45 @@ export function IssuesView({
                       <XCircle size={12} />
                       Dismiss
                     </button>
-                    <button
-                      className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onResolve(issue.id); }}
-                      disabled={issue.status !== "open"}
-                    >
-                      <CheckCircle size={12} />
-                      Resolve
-                    </button>
+                    {confirmingResolveId === issue.id ? (
+                      <span className="inline-flex items-center gap-2 text-xs">
+                        <span className="text-text-muted">Mark resolved?</span>
+                        <button
+                          type="button"
+                          className="text-accent underline cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onResolve(issue.id);
+                            setConfirmingResolveId(null);
+                          }}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          className="text-text-muted underline cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmingResolveId(null);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmingResolveId(issue.id);
+                        }}
+                        disabled={issue.status !== "open"}
+                      >
+                        <CheckCircle size={12} />
+                        Resolve
+                      </button>
+                    )}
                   </div>
                 </div>
 

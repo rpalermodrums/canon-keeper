@@ -448,7 +448,7 @@ Within each priority tier, suggestions are listed in recommended implementation 
 
 ## Implementation Status
 
-Status of suggestions after the 2026-02-07 remediation pass:
+Status of suggestions after completion of the 2026-02-07 UI remediation work:
 
 ### Addressed (fully or partially)
 
@@ -461,8 +461,8 @@ Status of suggestions after the 2026-02-07 remediation pass:
 | S-22 | Consistent Empty State Components | Implemented -- All plain-text empty fallbacks replaced with EmptyState component |
 | S-28 | Keyboard-Navigable Lists | Implemented -- tabIndex, role, onKeyDown, aria-selected added to ScenesView, IssuesView, BibleView |
 | S-29 | Label All Form Inputs | Implemented -- aria-label added to both SearchView inputs |
-| S-30 | Color-Independent Status Indicators | Partially implemented -- Pipeline dots now use shape-differentiated icons (CheckCircle2, Loader2, XCircle, Circle); health check icons vary by status (CheckCircle, XCircle, AlertCircle) |
+| S-30 | Color-Independent Status Indicators | Implemented -- Pipeline dots use shape-differentiated icons (CheckCircle2, Loader2, XCircle, Circle); health check icons vary by status (CheckCircle, XCircle, AlertCircle) |
 
-### Not yet addressed
+### Addressed in follow-up pass
 
-S-1 through S-16, S-18, S-23 through S-27 remain for future implementation passes.
+S-1 through S-16, S-18, S-23 through S-27 were addressed in the final remaining-spec implementation pass.

@@ -3,6 +3,7 @@ import { BookMarked, CheckCircle, Quote, RefreshCw, Search } from "lucide-react"
 import type { EntityDetail, EntitySummary } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { FilterBar, FilterGroup } from "../components/FilterBar";
+import { Skeleton } from "../components/Skeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { TogglePill } from "../components/TogglePill";
 
@@ -14,6 +15,7 @@ type EntityFilters = {
 
 type BibleViewProps = {
   busy: boolean;
+  loaded: boolean;
   entities: EntitySummary[];
   selectedEntityId: string;
   entityDetail: EntityDetail | null;
@@ -76,8 +78,31 @@ function groupByField(detail: EntityDetail | null): Array<{
   return Array.from(map.entries()).map(([field, claims]) => ({ field, claims }));
 }
 
+function BibleSkeleton(): JSX.Element {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-start justify-between">
+        <Skeleton variant="text" width="220px" height="28px" />
+        <Skeleton variant="rect" width="90px" height="36px" />
+      </div>
+      <Skeleton variant="rect" width="100%" height="44px" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} variant="rect" width="100%" height="40px" />
+          ))}
+        </div>
+        <div className="rounded-md border border-border p-4">
+          <Skeleton variant="rect" width="100%" height="200px" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function BibleView({
   busy,
+  loaded,
   entities,
   selectedEntityId,
   entityDetail,
@@ -100,6 +125,10 @@ export function BibleView({
   });
 
   const groupedClaims = useMemo(() => groupByField(entityDetail), [entityDetail]);
+
+  if (!loaded) {
+    return <BibleSkeleton />;
+  }
 
   return (
     <section className="flex flex-col gap-4">

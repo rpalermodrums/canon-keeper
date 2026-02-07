@@ -37,6 +37,7 @@ export interface SessionEnvelope {
     lastProjectName: string | null;
     activeSection: string;
     sidebarCollapsed: boolean;
+    hasSeenWelcome?: boolean;
   };
   projects: Record<string, ProjectUIState>;
 }
@@ -74,7 +75,8 @@ const DEFAULT_GLOBAL: SessionEnvelope["global"] = {
   sidebarCollapsed: false,
   lastProjectRoot: null,
   lastProjectId: null,
-  lastProjectName: null
+  lastProjectName: null,
+  hasSeenWelcome: false
 };
 
 // ---------------------------------------------------------------------------
@@ -151,7 +153,13 @@ export function loadSession(storage: StorageBackend = localStorage): SessionEnve
     if (raw !== null) {
       const parsed = JSON.parse(raw) as SessionEnvelope;
       if (parsed && parsed.version === 1 && parsed.global && parsed.projects) {
-        return parsed;
+        return {
+          ...parsed,
+          global: {
+            ...DEFAULT_GLOBAL,
+            ...parsed.global
+          }
+        };
       }
     }
   } catch {

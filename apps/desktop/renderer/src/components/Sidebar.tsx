@@ -7,14 +7,22 @@ type SidebarProps = {
   onSectionChange: (section: AppSection) => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  hasProject: boolean;
+  badges?: Partial<Record<string, number | null>>;
+  disabled?: boolean;
   showCollapseControl?: boolean;
 };
+
+const PROJECT_REQUIRED_SECTIONS = new Set<AppSection>(["search", "scenes", "issues", "style", "bible", "export"]);
 
 export function Sidebar({
   activeSection,
   onSectionChange,
   collapsed,
   onCollapsedChange,
+  hasProject,
+  badges,
+  disabled = false,
   showCollapseControl = true
 }: SidebarProps): JSX.Element {
   return (
@@ -26,7 +34,9 @@ export function Sidebar({
       {/* Brand */}
       <div className={`mb-4 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
         {collapsed ? (
-          <span className="font-display text-lg font-bold text-accent">CK</span>
+          <span className="font-display text-lg font-bold text-accent" title="CanonKeeper — Editorial Workstation">
+            CK
+          </span>
         ) : (
           <div>
             <h1 className="m-0 font-display text-xl font-bold tracking-wide">CanonKeeper</h1>
@@ -50,6 +60,12 @@ export function Sidebar({
         {APP_SECTIONS.map((section) => {
           const Icon = section.icon;
           const active = activeSection === section.id;
+          const requiresProject = PROJECT_REQUIRED_SECTIONS.has(section.id);
+          const isDisabled = disabled || (requiresProject && !hasProject);
+          const badgeValue = badges?.[section.id];
+          const hasBadge = badgeValue !== undefined;
+          const showCountBadge = typeof badgeValue === "number" && badgeValue > 0;
+          const showLoadingBadge = badgeValue === null;
           return (
             <button
               key={section.id}
@@ -58,15 +74,51 @@ export function Sidebar({
                 active
                   ? "border-accent/25 bg-accent-soft font-semibold text-accent-strong dark:text-accent"
                   : "text-text-secondary hover:bg-surface-2 hover:text-text-primary dark:hover:bg-surface-2/50"
-              } ${collapsed ? "justify-center px-0" : ""}`}
-              onClick={() => onSectionChange(section.id)}
-              title={collapsed ? section.label : undefined}
+              } ${collapsed ? "justify-center px-0" : ""} ${isDisabled ? "pointer-events-none opacity-40" : ""}`}
+              onClick={() => {
+                if (!isDisabled) {
+                  onSectionChange(section.id);
+                }
+              }}
+              aria-disabled={isDisabled || undefined}
+              tabIndex={isDisabled ? -1 : 0}
+              title={
+                isDisabled
+                  ? disabled
+                    ? undefined
+                    : "Open a project first"
+                  : collapsed
+                    ? section.label
+                    : undefined
+              }
             >
               {active ? (
                 <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-full bg-accent transition-transform duration-200" />
               ) : null}
               <Icon size={18} className={active ? "text-accent" : "text-text-muted group-hover:text-text-primary"} />
-              {collapsed ? null : <span>{section.label}</span>}
+              {collapsed ? (
+                hasBadge && (showLoadingBadge || showCountBadge) ? (
+                  <span
+                    className={`absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-accent ${
+                      showLoadingBadge ? "animate-pulse" : ""
+                    }`}
+                    aria-hidden="true"
+                  />
+                ) : null
+              ) : (
+                <>
+                  <span>{section.label}</span>
+                  {hasBadge ? (
+                    showLoadingBadge ? (
+                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                    ) : showCountBadge ? (
+                      <span className="ml-auto rounded-full bg-accent-soft px-1.5 text-xs font-medium text-accent">
+                        {badgeValue}
+                      </span>
+                    ) : null
+                  ) : null}
+                </>
+              )}
             </button>
           );
         })}

@@ -27,6 +27,7 @@ export type WorkerStatusEvent = {
 };
 
 export type UserFacingError = {
+  id: string;
   code: string;
   message: string;
   actionLabel?: string;
@@ -101,6 +102,7 @@ export type SceneSummary = {
   title: string | null;
   pov_mode: string;
   pov_entity_id: string | null;
+  pov_confidence: number | null;
   setting_entity_id: string | null;
   setting_text: string | null;
 };

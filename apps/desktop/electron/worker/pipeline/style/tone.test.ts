@@ -27,6 +27,7 @@ const scene = (overrides: Partial<SceneSummary>): SceneSummary => ({
   title: overrides.title ?? null,
   pov_mode: overrides.pov_mode ?? "unknown",
   pov_entity_id: overrides.pov_entity_id ?? null,
+  pov_confidence: overrides.pov_confidence ?? null,
   setting_entity_id: overrides.setting_entity_id ?? null,
   setting_text: overrides.setting_text ?? null
 });

@@ -1,12 +1,14 @@
-import type { JSX } from "react";
+import { useMemo, type JSX } from "react";
 import { Loader2, MoreHorizontal, Play, RefreshCw } from "lucide-react";
 import { AsyncToast } from "./components/AsyncToast";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { InlineError } from "./components/InlineError";
+import { ProgressBanner } from "./components/ProgressBanner";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { WelcomeModal } from "./components/WelcomeModal";
 import { useTheme } from "./context/ThemeContext";
 import { APP_SECTIONS, type AppSection, useCanonkeeperApp } from "./state/useCanonkeeperApp";
 import { BibleView } from "./views/BibleView";
@@ -86,6 +88,16 @@ export function App(): JSX.Element {
 
   const hasProject = Boolean(app.project);
   const hasDocuments = Boolean(app.lastIngest) || app.processingState.length > 0;
+  const sidebarBadges = useMemo(
+    () => ({
+      scenes: app.scenesLoaded ? (app.scenes.length > 0 ? app.scenes.length : undefined) : null,
+      issues: app.issuesLoaded
+        ? (app.issues.filter((issue) => issue.status === "open").length || undefined)
+        : null,
+      bible: app.entitiesLoaded ? (app.entities.length > 0 ? app.entities.length : undefined) : null
+    }),
+    [app.entities, app.entitiesLoaded, app.issues, app.issuesLoaded, app.scenes, app.scenesLoaded]
+  );
 
   return (
     <div className="flex min-h-screen">
@@ -95,6 +107,9 @@ export function App(): JSX.Element {
           onSectionChange={app.setActiveSection}
           collapsed={app.layoutMode === "tablet" ? true : app.sidebarCollapsed}
           onCollapsedChange={app.setSidebarCollapsed}
+          hasProject={hasProject}
+          badges={sidebarBadges}
+          disabled={app.bootState === "booting"}
         />
       ) : null}
 
@@ -108,6 +123,9 @@ export function App(): JSX.Element {
               onCollapsedChange={() => {
                 // no-op in mobile drawer
               }}
+              hasProject={hasProject}
+              badges={sidebarBadges}
+              disabled={app.bootState === "booting"}
               showCollapseControl={false}
             />
           </div>
@@ -131,15 +149,35 @@ export function App(): JSX.Element {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-text-secondary">
             <Loader2 size={24} className="animate-spin text-accent" />
             <p className="text-sm">Restoring your last session...</p>
+            <button
+              type="button"
+              className="mt-2 cursor-pointer text-xs text-text-muted underline transition-colors hover:text-text-primary"
+              onClick={app.skipBoot}
+            >
+              Skip and start fresh
+            </button>
           </div>
         ) : null}
 
         <main className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"} ${app.bootState === "booting" ? "hidden" : ""}`}>
-          {app.error ? <InlineError error={app.error} onDismiss={app.clearError} onAction={app.onRunDiagnostics} /> : null}
+          {app.errors.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {app.errors.map((err) => (
+                <InlineError
+                  key={err.id}
+                  error={err}
+                  onDismiss={() => app.dismissError(err.id)}
+                  onAction={app.onRunDiagnostics}
+                />
+              ))}
+            </div>
+          ) : null}
+          <ProgressBanner processingState={app.processingState} statusPhase={app.status?.phase ?? "idle"} />
 
-          <div className="animate-fade-in">
+          <div key={app.activeSection} className="animate-fade-in">
             {app.activeSection === "dashboard" ? (
               <DashboardView
+                loaded={app.project === null || app.scenesLoaded}
                 project={app.project}
                 status={app.status}
                 processingState={app.processingState}
@@ -158,7 +196,7 @@ export function App(): JSX.Element {
 
             {app.activeSection === "setup" ? (
               <SetupView
-                busy={app.busy}
+                busy={app.isBusy("project")}
                 rootPath={app.rootPath}
                 docPath={app.docPath}
                 healthCheck={app.healthCheck}
@@ -179,7 +217,7 @@ export function App(): JSX.Element {
 
             {app.activeSection === "search" ? (
               <SearchView
-                busy={app.busy}
+                busy={app.isBusy("search")}
                 searchQuery={app.searchQuery}
                 searchResults={app.searchResults}
                 questionText={app.questionText}
@@ -194,6 +232,7 @@ export function App(): JSX.Element {
             {app.activeSection === "scenes" ? (
               <ScenesView
                 busy={app.busy}
+                loaded={app.scenesLoaded}
                 scenes={app.scenes}
                 selectedSceneId={app.selectedSceneId}
                 sceneDetail={app.sceneDetail}
@@ -207,7 +246,8 @@ export function App(): JSX.Element {
 
             {app.activeSection === "issues" ? (
               <IssuesView
-                busy={app.busy}
+                busy={app.isBusy("issues")}
+                loaded={app.issuesLoaded}
                 issues={app.issues}
                 selectedIssueId={app.selectedIssueId}
                 filters={app.issueFilters}
@@ -227,6 +267,7 @@ export function App(): JSX.Element {
             {app.activeSection === "style" ? (
               <StyleView
                 busy={app.busy}
+                loaded={app.styleLoaded}
                 report={app.styleReport}
                 styleIssues={app.styleIssues}
                 onRefresh={() => void app.refreshStyle()}
@@ -246,7 +287,8 @@ export function App(): JSX.Element {
 
             {app.activeSection === "bible" ? (
               <BibleView
-                busy={app.busy}
+                busy={app.isBusy("bible")}
+                loaded={app.entitiesLoaded}
                 entities={app.entities}
                 selectedEntityId={app.selectedEntityId}
                 entityDetail={app.entityDetail}
@@ -261,7 +303,7 @@ export function App(): JSX.Element {
 
             {app.activeSection === "export" ? (
               <ExportView
-                busy={app.busy}
+                busy={app.isBusy("export")}
                 exportDir={app.exportDir}
                 exportKind={app.exportKind}
                 lastResult={app.lastExportResult}
@@ -277,7 +319,7 @@ export function App(): JSX.Element {
                 status={app.status}
                 healthCheck={app.healthCheck}
                 hasProject={hasProject}
-                busy={app.busy}
+                busy={app.isBusy("system")}
                 onRunDiagnostics={app.onRunDiagnostics}
                 onForgetProject={app.onForgetLastProject}
                 onResetProjectState={app.onResetProjectState}
@@ -326,6 +368,8 @@ export function App(): JSX.Element {
           </div>
         </nav>
       ) : null}
+
+      {app.showWelcome ? <WelcomeModal onGetStarted={app.onWelcomeGetStarted} onSkip={app.dismissWelcome} /> : null}
 
       <EvidenceDrawer
         open={app.evidenceDrawer.open}

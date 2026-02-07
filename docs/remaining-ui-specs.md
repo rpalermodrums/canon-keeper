@@ -4,6 +4,8 @@
 **Scope:** 14 open issues from the CanonKeeper UI audit
 **Prerequisite:** The 2026-02-07 remediation pass (17 fixes) must be merged first.
 
+> All 14 specs in this document were implemented on 2026-02-07. See docs/ui-issues.md for resolution status.
+
 All file paths are relative to `apps/desktop/`.
 
 ---

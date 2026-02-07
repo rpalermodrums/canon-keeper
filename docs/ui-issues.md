@@ -26,24 +26,24 @@ Fixes implemented during the 2026-02-07 remediation pass:
 |----|-------|----------|--------|
 | C-1 | Keyboard Accessibility Gaps | Critical | FIXED |
 | C-2 | Search Inputs Missing Labels | Critical | FIXED |
-| M-1 | Global busy Flag Blocks Unrelated Actions | Major | OPEN |
+| M-1 | Global busy Flag Blocks Unrelated Actions | Major | FIXED |
 | M-2 | Raw Error Codes Shown to Writers | Major | FIXED |
-| M-3 | No Progress Indication | Major | OPEN |
-| M-4 | Empty State Ambiguity | Major | OPEN |
-| M-5 | Sidebar Shows All Sections | Major | OPEN |
-| M-6 | First-Time User Experience | Major | OPEN |
+| M-3 | No Progress Indication | Major | FIXED |
+| M-4 | Empty State Ambiguity | Major | FIXED |
+| M-5 | Sidebar Shows All Sections | Major | FIXED |
+| M-6 | First-Time User Experience | Major | FIXED |
 | M-7 | Destructive Settings Actions No Confirmation | Major | FIXED |
 | M-8 | Health Check Icons Contradict Status | Major | FIXED |
-| M-9 | Boot Spinner No Timeout | Major | OPEN |
+| M-9 | Boot Spinner No Timeout | Major | FIXED |
 | m-1 | Inconsistent Busy Button Patterns | Minor | FIXED |
 | m-2 | Inconsistent Empty State Components | Minor | FIXED |
 | m-3 | Notices Section Missing ARIA | Minor | FIXED |
-| m-4 | Confidence Column Synthetic | Minor | OPEN |
-| m-5 | Issue Timestamps Never Displayed | Minor | OPEN |
-| m-6 | Error State Singular | Minor | OPEN |
+| m-4 | Confidence Column Synthetic | Minor | FIXED |
+| m-5 | Issue Timestamps Never Displayed | Minor | FIXED |
+| m-6 | Error State Singular | Minor | FIXED |
 | m-7 | Toast Auto-Dismiss Ignores Importance | Minor | FIXED |
-| m-8 | Repetition Table Truncation Silent | Minor | OPEN |
-| m-9 | Issue Resolve No Confirmation | Minor | OPEN |
+| m-8 | Repetition Table Truncation Silent | Minor | FIXED |
+| m-9 | Issue Resolve No Confirmation | Minor | FIXED |
 | m-10 | StatusLabel Full Paths | Minor | FIXED |
 | m-11 | More Button Icon | Minor | FIXED |
 | m-12 | Duplicate Heading in SearchView | Minor | FIXED |
@@ -52,11 +52,11 @@ Fixes implemented during the 2026-02-07 remediation pass:
 | m-15 | Run Diagnostics Never Disabled | Minor | FIXED |
 | m-16 | JSON Export Label | Minor | FIXED |
 | m-17 | Scene Empty State Redundant | Minor | FIXED |
-| c-1 | Fade-In Animation | Cosmetic | OPEN |
-| c-2 | Collapsed Sidebar Subtitle | Cosmetic | OPEN |
-| c-3 | No Badge Counts | Cosmetic | OPEN |
+| c-1 | Fade-In Animation | Cosmetic | FIXED |
+| c-2 | Collapsed Sidebar Subtitle | Cosmetic | FIXED |
+| c-3 | No Badge Counts | Cosmetic | FIXED |
 
-**Summary**: 17 of 31 issues fixed. 14 remain open for future passes.
+**Summary**: 31 of 31 issues fixed. 0 remain open.
 
 ---
 
@@ -115,7 +115,7 @@ For example: starting an export disables the Search button. Running a search dis
 
 **Impact:** Cross-view action blocking degrades the experience for any workflow that spans multiple sections.
 
-**Status: OPEN** -- Requires significant refactoring to implement per-namespace busy tracking.
+**Status: FIXED** -- Implemented per-action busy tracking by action namespace.
 
 ---
 
@@ -145,7 +145,7 @@ For a novel-length manuscript that could take 10+ minutes of pipeline processing
 
 **Impact:** Writers with large manuscripts have no feedback during the app's most important operation.
 
-**Status: OPEN** -- Requires new progress banner component.
+**Status: FIXED** -- Added progress indication for long-running operations.
 
 ---
 
@@ -160,7 +160,7 @@ No skeleton loading placeholders exist anywhere in the app. A `Skeleton` compone
 
 **Impact:** Momentary false negatives cause confusion. Writers may think their manuscript has no scenes/issues/entities when data is simply loading.
 
-**Status: OPEN** -- Requires loading/skeleton state implementation. Skeleton component exists but needs integration into views.
+**Status: FIXED** -- Added loading/skeleton state handling across affected views.
 
 ---
 
@@ -175,7 +175,7 @@ No visual distinction (dimming, badges, tooltips) communicates that these sectio
 
 **Impact:** New users and users between projects encounter confusing empty states with no actionable guidance.
 
-**Status: OPEN** -- Requires project-awareness gating logic for sidebar.
+**Status: FIXED** -- Sidebar now applies project-awareness gating for project-dependent sections.
 
 ---
 
@@ -190,7 +190,7 @@ Post-setup, there is no walkthrough or guided tour to explain the generated data
 
 **Impact:** New users must discover the app's capabilities entirely through exploration.
 
-**Status: OPEN** -- Requires new welcome/onboarding flow.
+**Status: FIXED** -- Phase 1 onboarding implemented with a welcome modal.
 
 ---
 
@@ -235,7 +235,7 @@ Furthermore, the sidebar and top bar remain visible and interactive during boot 
 
 **Impact:** Writers can be stuck indefinitely with no escape hatch. Sidebar interaction during boot creates a race condition with the boot completion logic.
 
-**Status: OPEN** -- Requires timeout + cancel button implementation.
+**Status: FIXED** -- Added boot timeout handling and cancel/recovery path.
 
 ---
 
@@ -291,7 +291,7 @@ The "Confidence" column in the scenes table (`ScenesView.tsx`, line 121) display
 
 **Impact:** The column implies a meaningful measurement that does not exist. It communicates false precision.
 
-**Status: OPEN** -- Requires backend change to expose real confidence values.
+**Status: FIXED** -- Scenes now display real confidence values from backend data.
 
 ---
 
@@ -304,7 +304,7 @@ The `created_at` field on issues is used for sorting (`IssuesView.tsx`, lines 10
 
 **Impact:** No temporal context for issue discovery. Writers cannot distinguish between issues found today and issues found weeks ago.
 
-**Status: OPEN** -- Requires UI addition for created_at display.
+**Status: FIXED** -- Issue timestamps are now displayed in the Issues view.
 
 ---
 
@@ -317,7 +317,7 @@ Only one `UserFacingError` can be displayed at a time (`error` state, line 257).
 
 **Impact:** Errors can be lost. In rapid failure scenarios, only the last error survives.
 
-**Status: OPEN** -- Requires error queue architecture.
+**Status: FIXED** -- Implemented queued handling for multiple simultaneous errors.
 
 ---
 
@@ -343,7 +343,7 @@ The repetition table renders `entries.slice(0, 20)` (`StyleView.tsx`, line 112) 
 
 **Impact:** Writers may believe only 20 repeated phrases exist when there are substantially more.
 
-**Status: OPEN** -- Requires "Show more" UI.
+**Status: FIXED** -- Added "Show more" affordance for truncated repetition results.
 
 ---
 
@@ -356,7 +356,7 @@ The "Dismiss" button correctly opens a confirmation modal requiring a reason (`A
 
 **Impact:** Accidental resolves are possible. The interaction model is inconsistent between two sibling actions.
 
-**Status: OPEN** -- Left as-is; undo toast provides a safety net.
+**Status: FIXED** -- Added resolve confirmation flow.
 
 ---
 
@@ -475,7 +475,7 @@ The `animate-fade-in` class wraps all view content. Every section switch trigger
 
 **Impact:** Perceived sluggishness during rapid navigation.
 
-**Status: OPEN** -- Confirmed as effectively inert after mount (no re-trigger on section switch).
+**Status: FIXED** -- Added section transition animation behavior for section switches.
 
 ---
 
@@ -488,7 +488,7 @@ When the sidebar collapses to icon-only mode, the brand shows "CK" (line 29) but
 
 **Impact:** Minor branding gap in collapsed mode.
 
-**Status: OPEN** -- Cosmetic, low priority.
+**Status: FIXED** -- Added tooltip support for collapsed sidebar branding/context.
 
 ---
 
@@ -501,7 +501,7 @@ Sidebar navigation items show no counts or badges. A writer cannot see "3 open i
 
 **Impact:** Missed opportunity for at-a-glance project status in the primary navigation.
 
-**Status: OPEN** -- Requires passing projectStats to sidebar.
+**Status: FIXED** -- Sidebar now shows badge counts from project stats.
 
 ---
 

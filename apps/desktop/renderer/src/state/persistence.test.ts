@@ -73,6 +73,24 @@ describe("persistence", () => {
       expect(envelope.projects["abc"]?.selectedSceneId).toBe("s1");
     });
 
+    it("defaults hasSeenWelcome to false when missing from stored envelope", () => {
+      const stored = {
+        ...createValidEnvelope(),
+        global: {
+          lastProjectRoot: "/some/path",
+          lastProjectId: "abc",
+          lastProjectName: "Test",
+          activeSection: "dashboard",
+          sidebarCollapsed: false
+        }
+      };
+      const storage = createMockStorage({
+        "canonkeeper.session.v1": JSON.stringify(stored)
+      });
+      const envelope = loadSession(storage);
+      expect(envelope.global.hasSeenWelcome).toBe(false);
+    });
+
     it("returns default envelope on corrupt JSON", () => {
       const storage = createMockStorage({
         "canonkeeper.session.v1": "{broken json!!"

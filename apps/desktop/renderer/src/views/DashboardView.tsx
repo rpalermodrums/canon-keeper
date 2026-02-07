@@ -15,9 +15,11 @@ import {
 import type { EvidenceCoverage, IngestResult, ProjectStats, ProjectSummary, WorkerStatus } from "../api/ipc";
 import { ShieldCheck } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
+import { Skeleton } from "../components/Skeleton";
 import { StatusBadge } from "../components/StatusBadge";
 
 type DashboardViewProps = {
+  loaded: boolean;
   project: ProjectSummary | null;
   status: WorkerStatus | null;
   processingState: Array<{
@@ -128,7 +130,22 @@ function friendlyEventMessage(eventType: string, payloadJson: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function DashboardSkeleton(): JSX.Element {
+  return (
+    <section className="flex flex-col gap-4">
+      <Skeleton variant="text" width="120px" height="28px" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} variant="rect" width="100%" height="80px" />
+        ))}
+      </div>
+      <Skeleton variant="rect" width="100%" height="200px" />
+    </section>
+  );
+}
+
 export function DashboardView({
+  loaded,
   project,
   status,
   processingState,
@@ -171,6 +188,10 @@ export function DashboardView({
     if (!history?.events) return [];
     return history.events.filter((e) => e.level === "warn" || e.level === "error");
   }, [history]);
+
+  if (!loaded) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <section className="flex flex-col gap-4">

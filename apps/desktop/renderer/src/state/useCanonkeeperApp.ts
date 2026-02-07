@@ -107,6 +107,21 @@ export const APP_SECTIONS: Array<{
   { id: "settings", label: "Settings", subtitle: "Preferences", icon: Settings }
 ];
 
+const ACTION_NAMESPACES = {
+  createProject: "project",
+  addDocument: "project",
+  search: "search",
+  ask: "search",
+  dismissIssue: "issues",
+  resolveIssue: "issues",
+  confirmClaim: "bible",
+  export: "export",
+  diagnostics: "system"
+} as const;
+
+type ActionLabel = keyof typeof ACTION_NAMESPACES;
+type ActionNamespace = (typeof ACTION_NAMESPACES)[ActionLabel];
+
 type IssueFilters = {
   status: "open" | "dismissed" | "resolved" | "all";
   severity: "all" | "low" | "medium" | "high";
@@ -147,7 +162,12 @@ function sanitizeErrorMessage(err: unknown): string {
   return stripped || "Unknown error";
 }
 
-function toUserFacingError(code: string, err: unknown, actionLabel?: string, action?: string): UserFacingError {
+function toUserFacingError(
+  code: string,
+  err: unknown,
+  actionLabel?: string,
+  action?: string
+): Omit<UserFacingError, "id"> {
   return {
     code,
     message: sanitizeErrorMessage(err),
@@ -222,11 +242,13 @@ export function useCanonkeeperApp() {
   const [askResult, setAskResult] = useState<AskResponse | null>(null);
 
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
+  const [scenesLoaded, setScenesLoaded] = useState(false);
   const [selectedSceneId, setSelectedSceneId] = useState("");
   const [sceneDetail, setSceneDetail] = useState<SceneDetail | null>(null);
   const [sceneQuery, setSceneQuery] = useState("");
 
   const [issues, setIssues] = useState<IssueSummary[]>([]);
+  const [issuesLoaded, setIssuesLoaded] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState("");
   const [issueFilters, setIssueFilters] = useState<IssueFilters>({
     status: "open",
@@ -238,8 +260,10 @@ export function useCanonkeeperApp() {
 
   const [styleReport, setStyleReport] = useState<StyleReport | null>(null);
   const [styleIssues, setStyleIssues] = useState<IssueSummary[]>([]);
+  const [styleLoaded, setStyleLoaded] = useState(false);
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
+  const [entitiesLoaded, setEntitiesLoaded] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [entityDetail, setEntityDetail] = useState<EntityDetail | null>(null);
   const [entityFilters, setEntityFilters] = useState<EntityFilters>({
@@ -265,14 +289,15 @@ export function useCanonkeeperApp() {
   });
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const [error, setError] = useState<UserFacingError | null>(null);
-  const [pendingActions, setPendingActions] = useState<string[]>([]);
+  const [errors, setErrors] = useState<UserFacingError[]>([]);
+  const [pendingActions, setPendingActions] = useState<Map<ActionNamespace, Set<ActionLabel>>>(new Map());
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() =>
     typeof window === "undefined" ? "desktop" : computeLayoutMode(window.innerWidth)
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsedRaw] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const [confirmClaimDraft, setConfirmClaimDraft] = useState<{
     field: string;
@@ -298,12 +323,24 @@ export function useCanonkeeperApp() {
   const lastWorkerState = useRef<"idle" | "busy" | "unknown">("unknown");
   const hydratingRef = useRef(false);
   const bootAttemptedRef = useRef(false);
+  const bootCancelledRef = useRef(false);
   const sessionRef = useRef<SessionEnvelope | null>(null);
 
   const [bootState, setBootState] = useState<"booting" | "ready" | "restore-failed">("booting");
   const [bootError, setBootError] = useState<string | null>(null);
 
-  const busy = pendingActions.length > 0;
+  const busyNamespaces = useMemo(() => {
+    const result = new Set<ActionNamespace>();
+    for (const [namespace, actions] of pendingActions) {
+      if (actions.size > 0) {
+        result.add(namespace);
+      }
+    }
+    return result;
+  }, [pendingActions]);
+
+  const busy = busyNamespaces.size > 0;
+  const isBusy = useCallback((namespace: ActionNamespace) => busyNamespaces.has(namespace), [busyNamespaces]);
 
   const pushToast = useCallback((toast: Omit<ToastItem, "id">) => {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -324,17 +361,31 @@ export function useCanonkeeperApp() {
     setToasts((current) => current.filter((item) => item.id !== id));
   }, []);
 
-  const beginAction = useCallback((label: string) => {
-    setPendingActions((current) => [...current, label]);
+  const beginAction = useCallback((namespace: ActionNamespace, label: ActionLabel) => {
+    setPendingActions((current) => {
+      const next = new Map(current);
+      const actions = new Set(next.get(namespace) ?? []);
+      actions.add(label);
+      next.set(namespace, actions);
+      return next;
+    });
   }, []);
 
-  const endAction = useCallback((label: string) => {
+  const endAction = useCallback((namespace: ActionNamespace, label: ActionLabel) => {
     setPendingActions((current) => {
-      const index = current.indexOf(label);
-      if (index < 0) {
+      const next = new Map(current);
+      const actions = next.get(namespace);
+      if (!actions) {
         return current;
       }
-      return [...current.slice(0, index), ...current.slice(index + 1)];
+      const nextActions = new Set(actions);
+      nextActions.delete(label);
+      if (nextActions.size === 0) {
+        next.delete(namespace);
+      } else {
+        next.set(namespace, nextActions);
+      }
+      return next;
     });
   }, []);
 
@@ -372,39 +423,55 @@ export function useCanonkeeperApp() {
   }, [project]);
 
   const refreshScenes = useCallback(async () => {
-    const list = await listScenes();
-    setScenes(list);
-    if (selectedSceneId && !list.some((scene) => scene.id === selectedSceneId)) {
-      setSelectedSceneId("");
-      setSceneDetail(null);
+    try {
+      const list = await listScenes();
+      setScenes(list);
+      if (selectedSceneId && !list.some((scene) => scene.id === selectedSceneId)) {
+        setSelectedSceneId("");
+        setSceneDetail(null);
+      }
+    } finally {
+      setScenesLoaded(true);
     }
   }, [selectedSceneId]);
 
   const refreshIssues = useCallback(async () => {
-    const list = await listIssues({
-      status: issueFilters.status,
-      type: issueFilters.type || undefined,
-      severity: issueFilters.severity === "all" ? undefined : issueFilters.severity
-    });
-    setIssues(list);
-    if (selectedIssueId && !list.some((issue) => issue.id === selectedIssueId)) {
-      setSelectedIssueId("");
+    try {
+      const list = await listIssues({
+        status: issueFilters.status,
+        type: issueFilters.type || undefined,
+        severity: issueFilters.severity === "all" ? undefined : issueFilters.severity
+      });
+      setIssues(list);
+      if (selectedIssueId && !list.some((issue) => issue.id === selectedIssueId)) {
+        setSelectedIssueId("");
+      }
+    } finally {
+      setIssuesLoaded(true);
     }
   }, [issueFilters, selectedIssueId]);
 
   const refreshStyle = useCallback(async () => {
-    const report = await getStyleReport();
-    setStyleReport(report);
-    const list = await listIssues({ status: "all" });
-    setStyleIssues(list.filter((issue) => ["repetition", "tone_drift", "dialogue_tic"].includes(issue.type)));
+    try {
+      const report = await getStyleReport();
+      setStyleReport(report);
+      const list = await listIssues({ status: "all" });
+      setStyleIssues(list.filter((issue) => ["repetition", "tone_drift", "dialogue_tic"].includes(issue.type)));
+    } finally {
+      setStyleLoaded(true);
+    }
   }, []);
 
   const refreshEntities = useCallback(async () => {
-    const list = await listEntities();
-    setEntities(list);
-    if (selectedEntityId && !list.some((entity) => entity.id === selectedEntityId)) {
-      setSelectedEntityId("");
-      setEntityDetail(null);
+    try {
+      const list = await listEntities();
+      setEntities(list);
+      if (selectedEntityId && !list.some((entity) => entity.id === selectedEntityId)) {
+        setSelectedEntityId("");
+        setEntityDetail(null);
+      }
+    } finally {
+      setEntitiesLoaded(true);
     }
   }, [selectedEntityId]);
 
@@ -427,6 +494,10 @@ export function useCanonkeeperApp() {
     if (hydratingRef.current) return;
     hydratingRef.current = true;
     try {
+      setScenesLoaded(false);
+      setIssuesLoaded(false);
+      setStyleLoaded(false);
+      setEntitiesLoaded(false);
       setProject(projectSummary);
       setRootPath(projectSummary.root_path);
       if (projectState) {
@@ -457,17 +528,46 @@ export function useCanonkeeperApp() {
   }, [refreshEntities, refreshIssues, refreshScenes, refreshStyle]);
 
   const setAppError = useCallback((code: string, err: unknown, actionLabel?: string, action?: string) => {
-    setError(toUserFacingError(code, err, actionLabel, action));
+    const userError = toUserFacingError(code, err, actionLabel, action);
+    const errorWithId: UserFacingError = { ...userError, id: crypto.randomUUID() };
+    setErrors((current) => {
+      const next = [...current, errorWithId];
+      return next.length > 5 ? next.slice(next.length - 5) : next;
+    });
   }, []);
 
-  const clearError = useCallback(() => {
-    setError(null);
+  const dismissError = useCallback((id: string) => {
+    setErrors((current) => current.filter((error) => error.id !== id));
+  }, []);
+
+  const clearAllErrors = useCallback(() => {
+    setErrors([]);
   }, []);
 
   const clearBootError = useCallback(() => {
     setBootError(null);
     setBootState("ready");
   }, []);
+
+  const skipBoot = useCallback(() => {
+    bootCancelledRef.current = true;
+    setBootError(null);
+    setBootState("ready");
+    setActiveSection("setup");
+  }, []);
+
+  const dismissWelcome = useCallback(() => {
+    setShowWelcome(false);
+    const envelope = sessionRef.current ?? loadSession();
+    const next = setGlobalState(envelope, { hasSeenWelcome: true });
+    sessionRef.current = next;
+    saveSession(next);
+  }, []);
+
+  const onWelcomeGetStarted = useCallback(() => {
+    dismissWelcome();
+    setActiveSection("setup");
+  }, [dismissWelcome]);
 
   const applyProjectUIState = useCallback((state: ProjectUIState) => {
     setIssueFilters(state.issueFilters as IssueFilters);
@@ -484,6 +584,16 @@ export function useCanonkeeperApp() {
   useEffect(() => {
     if (bootAttemptedRef.current) return;
     bootAttemptedRef.current = true;
+    bootCancelledRef.current = false;
+
+    const bootTimeout = setTimeout(() => {
+      if (bootCancelledRef.current) {
+        return;
+      }
+      setBootState("restore-failed");
+      setBootError("Restoring your last session timed out. You can start fresh or try again.");
+      setActiveSection("setup");
+    }, 15_000);
 
     const boot = async () => {
       // 1. Load persisted session envelope
@@ -504,11 +614,19 @@ export function useCanonkeeperApp() {
       // 3. Check if worker already has an active project (refresh / HMR case)
       try {
         const current = await getCurrentProject();
+        if (bootCancelledRef.current) {
+          clearTimeout(bootTimeout);
+          return;
+        }
 
         if (current) {
           const projectState = getProjectState(envelope, current.id);
           const withProjectState = setProjectState(envelope, current.id, projectState);
           await hydrateProjectData(current, projectState);
+          if (bootCancelledRef.current) {
+            clearTimeout(bootTimeout);
+            return;
+          }
           sessionRef.current = setGlobalState(withProjectState, {
             lastProjectRoot: current.root_path,
             lastProjectId: current.id,
@@ -516,6 +634,7 @@ export function useCanonkeeperApp() {
           });
           saveSession(sessionRef.current);
           setBootState("ready");
+          clearTimeout(bootTimeout);
           return;
         }
       } catch {
@@ -529,12 +648,20 @@ export function useCanonkeeperApp() {
             rootPath: envelope.global.lastProjectRoot,
             createIfMissing: false
           });
+          if (bootCancelledRef.current) {
+            clearTimeout(bootTimeout);
+            return;
+          }
           if (!restored) {
             throw new Error("Project not found");
           }
           const projectState = getProjectState(envelope, restored.id);
           const withProjectState = setProjectState(envelope, restored.id, projectState);
           await hydrateProjectData(restored, projectState);
+          if (bootCancelledRef.current) {
+            clearTimeout(bootTimeout);
+            return;
+          }
           sessionRef.current = setGlobalState(withProjectState, {
             lastProjectRoot: restored.root_path,
             lastProjectId: restored.id,
@@ -542,8 +669,13 @@ export function useCanonkeeperApp() {
           });
           saveSession(sessionRef.current);
           setBootState("ready");
+          clearTimeout(bootTimeout);
           return;
         } catch {
+          if (bootCancelledRef.current) {
+            clearTimeout(bootTimeout);
+            return;
+          }
           // Stale/moved/permission error — clear and show recovery UI
           const cleared = setGlobalState(envelope, {
             lastProjectRoot: null,
@@ -557,15 +689,24 @@ export function useCanonkeeperApp() {
           );
           setActiveSection("setup");
           setBootState("restore-failed");
+          clearTimeout(bootTimeout);
           return;
         }
       }
 
       // 5. No active project, no persisted root — fresh start
-      setBootState("ready");
+      if (!bootCancelledRef.current) {
+        setBootState("ready");
+      }
+      clearTimeout(bootTimeout);
     };
 
     void boot();
+
+    return () => {
+      bootCancelledRef.current = true;
+      clearTimeout(bootTimeout);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -586,6 +727,15 @@ export function useCanonkeeperApp() {
       setActiveSection("setup");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootState]);
+
+  useEffect(() => {
+    if (bootState !== "ready" || !sessionRef.current) {
+      return;
+    }
+    if (!sessionRef.current.global.hasSeenWelcome) {
+      setShowWelcome(true);
+    }
   }, [bootState]);
 
   useEffect(() => {
@@ -689,9 +839,8 @@ export function useCanonkeeperApp() {
   }, [project, refreshProjectData]);
 
   const runDiagnostics = useCallback(async () => {
-    const action = "diagnostics";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "diagnostics";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       const result = await getProjectDiagnostics();
       setHealthCheck(result);
@@ -701,18 +850,17 @@ export function useCanonkeeperApp() {
     } catch (err) {
       setAppError("DIAGNOSTICS_FAILED", err, "Retry", "runDiagnostics");
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, endAction, pushToast, setAppError]);
+  }, [beginAction, endAction, pushToast, setAppError]);
 
   useEffect(() => {
     void runDiagnostics();
   }, [runDiagnostics]);
 
   const onCreateProject = useCallback(async () => {
-    const action = "createProject";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "createProject";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       const created = await createOrOpenProject({ rootPath: rootPath.trim() });
       if (!created) {
@@ -732,9 +880,9 @@ export function useCanonkeeperApp() {
     } catch (err) {
       setAppError("PROJECT_OPEN_FAILED", err, "Run Diagnostics", "runDiagnostics");
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, endAction, hydrateProjectData, pushToast, rootPath, setAppError]);
+  }, [beginAction, endAction, hydrateProjectData, pushToast, rootPath, setAppError]);
 
   const onPickProjectRoot = useCallback(async () => {
     try {
@@ -764,7 +912,7 @@ export function useCanonkeeperApp() {
       if (fixture) {
         setDocPath(fixture);
       } else {
-        setError({ code: "FIXTURE_NOT_FOUND", message: "Bundled fixture not found." });
+        setAppError("FIXTURE_NOT_FOUND", new Error("Bundled fixture not found."));
       }
     } catch (err) {
       setAppError("FIXTURE_LOAD_FAILED", err);
@@ -772,9 +920,8 @@ export function useCanonkeeperApp() {
   }, [setAppError]);
 
   const onAddDocument = useCallback(async () => {
-    const action = "addDocument";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "addDocument";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       const result = await addDocument({ path: docPath.trim() });
       setLastIngest(result);
@@ -783,37 +930,35 @@ export function useCanonkeeperApp() {
     } catch (err) {
       setAppError("INGEST_FAILED", err);
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, docPath, endAction, pushToast, refreshProjectData, setAppError]);
+  }, [beginAction, docPath, endAction, pushToast, refreshProjectData, setAppError]);
 
   const onSearch = useCallback(async () => {
-    const action = "search";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "search";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       const result = await querySearch(searchQuery.trim());
       setSearchResults(result);
     } catch (err) {
       setAppError("SEARCH_FAILED", err);
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, endAction, searchQuery, setAppError]);
+  }, [beginAction, endAction, searchQuery, setAppError]);
 
   const onAsk = useCallback(async () => {
-    const action = "ask";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "ask";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       const result = await askQuestion(questionText.trim());
       setAskResult(result);
     } catch (err) {
       setAppError("ASK_FAILED", err);
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, endAction, questionText, setAppError]);
+  }, [beginAction, endAction, questionText, setAppError]);
 
   const onSelectScene = useCallback(
     async (sceneId: string) => {
@@ -846,9 +991,8 @@ export function useCanonkeeperApp() {
     if (!dismissIssueDraft) {
       return;
     }
-    const action = "dismissIssue";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "dismissIssue";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       await dismissIssue(dismissIssueDraft.issueId, dismissIssueDraft.reason.trim());
       const issueId = dismissIssueDraft.issueId;
@@ -867,15 +1011,14 @@ export function useCanonkeeperApp() {
     } catch (err) {
       setAppError("ISSUE_DISMISS_FAILED", err);
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, dismissIssueDraft, endAction, pushToast, refreshIssues, setAppError]);
+  }, [beginAction, dismissIssueDraft, endAction, pushToast, refreshIssues, setAppError]);
 
   const onResolveIssue = useCallback(
     async (issueId: string) => {
-      const action = "resolveIssue";
-      beginAction(action);
-      clearError();
+      const action: ActionLabel = "resolveIssue";
+      beginAction(ACTION_NAMESPACES[action], action);
       try {
         await resolveIssue(issueId);
         await refreshIssues();
@@ -892,10 +1035,10 @@ export function useCanonkeeperApp() {
       } catch (err) {
         setAppError("ISSUE_RESOLVE_FAILED", err);
       } finally {
-        endAction(action);
+        endAction(ACTION_NAMESPACES[action], action);
       }
     },
-    [beginAction, clearError, endAction, pushToast, refreshIssues, setAppError]
+    [beginAction, endAction, pushToast, refreshIssues, setAppError]
   );
 
   const onSelectEntity = useCallback(
@@ -920,9 +1063,8 @@ export function useCanonkeeperApp() {
     if (!entityDetail || !confirmClaimDraft) {
       return;
     }
-    const action = "confirmClaim";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "confirmClaim";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       await confirmClaim({
         entityId: entityDetail.entity.id,
@@ -937,9 +1079,9 @@ export function useCanonkeeperApp() {
     } catch (err) {
       setAppError("CLAIM_CONFIRM_FAILED", err);
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, confirmClaimDraft, endAction, entityDetail, pushToast, setAppError]);
+  }, [beginAction, confirmClaimDraft, endAction, entityDetail, pushToast, setAppError]);
 
   const onPickExportDir = useCallback(async () => {
     try {
@@ -953,23 +1095,22 @@ export function useCanonkeeperApp() {
   }, [setAppError]);
 
   const onRunExport = useCallback(async () => {
-    const action = "export";
-    beginAction(action);
-    clearError();
+    const action: ActionLabel = "export";
+    beginAction(ACTION_NAMESPACES[action], action);
     try {
       const result = await runExport(exportDir.trim(), exportKind);
       setLastExportResult(result);
       if (result.ok) {
         pushToast({ message: `Export complete (${result.files.length} files).`, tone: "success" });
       } else {
-        setError({ code: "EXPORT_FAILED", message: result.error });
+        setAppError("EXPORT_FAILED", new Error(result.error));
       }
     } catch (err) {
       setAppError("EXPORT_FAILED", err);
     } finally {
-      endAction(action);
+      endAction(ACTION_NAMESPACES[action], action);
     }
-  }, [beginAction, clearError, endAction, exportDir, exportKind, pushToast, setAppError]);
+  }, [beginAction, endAction, exportDir, exportKind, pushToast, setAppError]);
 
   const closeEvidence = useCallback(() => {
     setEvidenceDrawer((drawer) => ({ ...drawer, open: false }));
@@ -1229,6 +1370,10 @@ export function useCanonkeeperApp() {
     bootState,
     bootError,
     clearBootError,
+    skipBoot,
+    showWelcome,
+    dismissWelcome,
+    onWelcomeGetStarted,
     activeSection,
     setActiveSection,
     status,
@@ -1250,17 +1395,21 @@ export function useCanonkeeperApp() {
     setQuestionText,
     askResult,
     scenes,
+    scenesLoaded,
     selectedSceneId,
     sceneDetail,
     sceneQuery,
     setSceneQuery,
     issues,
+    issuesLoaded,
     selectedIssueId,
     issueFilters,
     setIssueFilters,
     styleReport,
     styleIssues,
+    styleLoaded,
     entities,
+    entitiesLoaded,
     selectedEntityId,
     entityDetail,
     entityFilters,
@@ -1271,8 +1420,10 @@ export function useCanonkeeperApp() {
     setExportKind,
     healthCheck,
     busy,
-    error,
-    clearError,
+    isBusy,
+    errors,
+    dismissError,
+    clearAllErrors,
     toasts,
     dismissToast,
     evidenceDrawer,
