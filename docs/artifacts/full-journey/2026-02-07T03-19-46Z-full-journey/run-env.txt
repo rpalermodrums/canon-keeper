@@ -1,0 +1,5 @@
+RUN_ID=2026-02-07T03-19-46Z-full-journey
+ART_DIR=docs/artifacts/full-journey/2026-02-07T03-19-46Z-full-journey
+SHOT_DIR=output/playwright/full-journey/2026-02-07T03-19-46Z-full-journey
+TMP_ROOT=/tmp/canonkeeper-full-journey-vCukc6
+EXPORT_DIR=/tmp/canonkeeper-full-journey-vCukc6/export
