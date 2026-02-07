@@ -79,15 +79,15 @@ export const APP_SECTIONS: Array<{
   subtitle: string;
   icon: ComponentType<{ size?: number | string; className?: string }>;
 }> = [
-  { id: "dashboard", label: "Dashboard", subtitle: "Pipeline overview", icon: LayoutDashboard },
-  { id: "setup", label: "Setup", subtitle: "Onboarding and diagnostics", icon: FolderOpen },
-  { id: "search", label: "Search", subtitle: "Retrieval and ask", icon: Search },
-  { id: "scenes", label: "Scenes", subtitle: "Scene index", icon: BookOpen },
-  { id: "issues", label: "Issues", subtitle: "Continuity and style flags", icon: AlertTriangle },
-  { id: "style", label: "Style", subtitle: "Diagnostic metrics", icon: Palette },
-  { id: "bible", label: "Bible", subtitle: "Entities and claims", icon: BookMarked },
-  { id: "export", label: "Exports", subtitle: "Markdown and JSON", icon: Download },
-  { id: "settings", label: "Settings", subtitle: "Runtime health", icon: Settings }
+  { id: "dashboard", label: "Home", subtitle: "Your project at a glance", icon: LayoutDashboard },
+  { id: "setup", label: "Setup", subtitle: "Get started", icon: FolderOpen },
+  { id: "search", label: "Search", subtitle: "Search your manuscript", icon: Search },
+  { id: "scenes", label: "Scenes", subtitle: "Browse scenes", icon: BookOpen },
+  { id: "issues", label: "Issues", subtitle: "Review editorial issues", icon: AlertTriangle },
+  { id: "style", label: "Style", subtitle: "Writing style patterns", icon: Palette },
+  { id: "bible", label: "Characters & World", subtitle: "Characters and world", icon: BookMarked },
+  { id: "export", label: "Exports", subtitle: "Export your data", icon: Download },
+  { id: "settings", label: "Settings", subtitle: "Preferences", icon: Settings }
 ];
 
 type IssueFilters = {

@@ -122,9 +122,9 @@ Primary approach:
 Scenario:
 1. Open/select project directory.
 2. Add manuscript fixture (`simple_md.md` and `contradiction.md`).
-3. Wait for ingest completion in status/history.
-4. Navigate Dashboard → Bible → Scenes → Issues → Style → Ask.
-5. Confirm one evidence-backed claim.
+3. Wait for processing completion in status/history.
+4. Navigate Home → Characters & World → Scenes → Issues → Style → Search.
+5. Confirm one evidence-backed detail.
 6. Resolve one issue.
 7. Ask a question and verify snippets/citations.
 8. Export markdown/json and verify file outputs + citation presence rules.

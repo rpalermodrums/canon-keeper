@@ -57,7 +57,7 @@ Use an automation harness (playwright bridge or equivalent) to execute:
 1. Launch app
 2. Create/open isolated project
 3. Add `contradiction.md`
-4. Poll status until idle and queue depth zero
+4. Poll status until idle
 5. Query scenes/issues/entities/style/search/ask/export
 
 If UI automation is unavailable, call IPC/worker RPC directly in-process and preserve parity checks.
@@ -85,35 +85,42 @@ If UI automation is unavailable, call IPC/worker RPC directly in-process and pre
 - `style_report` response returns repetition/tone/dialogue payloads
 - At least one style issue exists for `tone_shift.md` or `novel_length_fixture.md`
 
-### E. Bible + Claims
+### E. Characters & World + Details
+
 - Entity list not empty after contradiction + long-form ingest
-- For surfaced claims in entity detail: evidence count >= 1
-- Confirm claim requires `sourceClaimId`
-- Confirmed claim persists and remains evidence-backed
+- For surfaced details in entity detail: evidence count >= 1
+- Confirm detail requires `sourceClaimId` (backend RPC name)
+- Confirmed detail persists and remains evidence-backed
 
 ### F. Issues Lifecycle
+
 - Contradiction fixture yields continuity issue(s)
 - Dismiss transitions issue status to dismissed
 - Undo returns status to open
 - Resolve transitions status to resolved
 
 ### G. Ask
+
 - Known question returns `answer` or `snippets`
 - Unknown question returns `not_found`
 - No response variant includes uncited fabricated narrative
 
 ### H. Export
+
 - `export.run(kind=md)` returns success + files list
 - `export.run(kind=json)` returns success + files list
 - Exported files exist on disk
 
 ### I. Long-Form Stress
+
 After ingesting `novel_length_fixture.md`:
+
 - Worker reaches idle state within timeout budget (configurable)
 - UI/API endpoints remain responsive
 - No fatal runtime errors in logs
 
 ## 7. Timeout + Retry Policy
+
 - Poll interval: 1-2 seconds
 - Stage timeout: 120 seconds for standard fixtures
 - Long fixture timeout: 600 seconds (configurable by machine capacity)
@@ -121,7 +128,9 @@ After ingesting `novel_length_fixture.md`:
 - Do not retry logical assertion failures
 
 ## 8. Failure Classification
+
 Classify failures as:
+
 - `infra` (env/runtime/tooling)
 - `pipeline` (ingest/scenes/style/extraction/continuity)
 - `api` (IPC/RPC contract)
@@ -131,19 +140,23 @@ Classify failures as:
 Include likely owner and first suspected subsystem.
 
 ## 9. Agent Safety Rules
+
 - Never edit manuscript source fixtures during assertions
 - Never mutate user project folders outside isolated temp roots
 - Never auto-accept low-evidence claims as passing conditions
 - On partial failure, continue remaining independent checks and emit full report
 
 ## 10. Pass Criteria
+
 Run is `PASS` only when:
+
 - static gates succeed
 - all critical assertions (A, B, C, E, F, G, H) pass
 - long-form stress (I) passes or is explicitly waived with reason
 - no blocker-level errors in logs
 
 ## 11. Minimal Report Template (`summary.md`)
+
 - Run metadata (timestamp, commit SHA, environment)
 - Command results table
 - Assertion totals (pass/fail/skipped)

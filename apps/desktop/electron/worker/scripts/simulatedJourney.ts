@@ -201,8 +201,8 @@ async function run(): Promise<void> {
     addAssertion({
       id: "ingest-documents",
       status: "pass",
-      expected: "two fixture documents are ingested",
-      actual: "ingest completed for simple_md.md and contradiction.md",
+      expected: "two fixture documents are added to the project",
+      actual: "documents added: simple_md.md and contradiction.md",
       evidence: `${simplePath}, ${contradictionPath}`
     });
 
@@ -210,8 +210,8 @@ async function run(): Promise<void> {
     addAssertion({
       id: "stages-complete",
       status: "pass",
-      expected: "scenes/style/extraction/continuity reach ok",
-      actual: "all required stages reached ok",
+      expected: "all processing activity stages reach ok",
+      actual: "all required activity stages reached ok",
       evidence: "project.getProcessingState"
     });
 
@@ -270,7 +270,7 @@ async function run(): Promise<void> {
     addAssertion({
       id: "entities-available",
       status: entities.length > 0 ? "pass" : "fail",
-      expected: "at least one entity exists",
+      expected: "at least one character/world entity exists",
       actual: `${entities.length} entities returned`,
       evidence: "bible.listEntities"
     });

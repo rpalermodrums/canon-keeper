@@ -30,15 +30,15 @@ export function SearchView({
   return (
     <section className="flex flex-col gap-4">
       <header>
-        <h2 className="m-0 font-display text-2xl font-bold">Search and Ask</h2>
+        <h2 className="m-0 font-display text-2xl font-bold">Search Your Manuscript</h2>
         <p className="mt-1 text-sm text-text-muted">
-          Retrieval-first interactions. Ask has strict result states: answer, snippets, or not_found.
+          Find passages and ask questions about your story.
         </p>
       </header>
 
       {/* Search */}
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 text-sm font-semibold">Search Chunks</h3>
+        <h3 className="m-0 text-sm font-semibold">Search Your Manuscript</h3>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search size={16} className="absolute top-1/2 left-3 -translate-y-1/2 text-text-muted" />
@@ -66,9 +66,9 @@ export function SearchView({
               {searchResults.results.map((result) => (
                 <div key={result.chunkId} className="rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-mono text-xs text-text-muted">{result.documentPath}</span>
+                    <span className="truncate font-mono text-xs text-text-muted">{result.documentPath.split("/").pop()}</span>
                     <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
-                      chunk {result.ordinal}
+                      Passage {result.ordinal}
                     </span>
                   </div>
                   <div className="mt-2 border-l-3 border-accent pl-3 text-sm italic text-text-secondary">
@@ -85,7 +85,7 @@ export function SearchView({
 
       {/* Ask */}
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 text-sm font-semibold">Ask the Bible</h3>
+        <h3 className="m-0 text-sm font-semibold">Ask About Your Story</h3>
         <div className="flex gap-2">
           <input
             className="flex-1"
@@ -106,7 +106,7 @@ export function SearchView({
 
         {!askResult ? null : askResult.kind === "answer" ? (
           <div className="rounded-md border border-ok/30 bg-ok-soft/50 p-4">
-            <h4 className="m-0 mb-2 text-sm font-semibold text-ok-strong">Grounded Answer</h4>
+            <h4 className="m-0 mb-2 text-sm font-semibold text-ok-strong">Answer</h4>
             <p className="m-0 text-sm text-text-primary">{askResult.answer}</p>
             <div className="mt-3 flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -124,13 +124,13 @@ export function SearchView({
           </div>
         ) : askResult.kind === "snippets" ? (
           <div className="rounded-md border border-warn/30 bg-warn-soft/50 p-4">
-            <h4 className="m-0 mb-2 text-sm font-semibold text-warn-strong">Evidence Snippets</h4>
-            <p className="mb-3 text-xs text-text-muted">No synthesized answer yet; showing directly retrieved text.</p>
+            <h4 className="m-0 mb-2 text-sm font-semibold text-warn-strong">Related Passages</h4>
+            <p className="mb-3 text-xs text-text-muted">Here are the most relevant passages from your manuscript.</p>
             <div className="flex flex-col gap-2">
               {askResult.snippets.map((snippet) => (
                 <div key={snippet.chunkId} className="rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
                   <div className="font-mono text-xs text-text-muted">
-                    {snippet.documentPath} | chunk {snippet.ordinal}
+                    {snippet.documentPath.split("/").pop()}, Passage {snippet.ordinal}
                   </div>
                   <div className="mt-1 border-l-3 border-accent pl-3 text-sm italic text-text-secondary">
                     &quot;{snippet.snippet}&quot;

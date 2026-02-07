@@ -39,7 +39,7 @@ function stepState(index: number, hasProject: boolean, hasDocuments: boolean, ha
 const steps = [
   { num: 1, label: "Open Project Folder" },
   { num: 2, label: "Add Manuscript Files" },
-  { num: 3, label: "Run Diagnostics" }
+  { num: 3, label: "Verify Setup" }
 ] as const;
 
 export function SetupView({
@@ -65,9 +65,9 @@ export function SetupView({
   return (
     <section className="flex flex-col gap-4">
       <header>
-        <h2 className="m-0 font-display text-2xl font-bold">Setup Wizard</h2>
+        <h2 className="m-0 font-display text-2xl font-bold">Get Started</h2>
         <p className="mt-1 text-sm text-text-muted">
-          Complete these steps in order to prevent configuration errors and speed up first ingestion.
+          Set up your project in a few quick steps.
         </p>
       </header>
 
@@ -133,10 +133,10 @@ export function SetupView({
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
         <div className="flex items-center justify-between gap-3">
           <h3 className="m-0 text-sm font-semibold">2. Manuscript Files</h3>
-          {allowAddDocument ? <StatusBadge label="ready" status="ok" /> : <StatusBadge label="blocked" status="warn" />}
+          {allowAddDocument ? <StatusBadge label="ready" status="ok" /> : <StatusBadge label="pending" status="warn" />}
         </div>
         {!allowAddDocument ? (
-          <p className="text-sm text-text-muted">Open a project folder first to enable manuscript ingestion.</p>
+          <p className="text-sm text-text-muted">Open a project folder first to add manuscripts.</p>
         ) : null}
         <label className="flex flex-col gap-1 text-sm text-text-secondary">
           Manuscript path (.md, .txt, .docx)
@@ -168,21 +168,23 @@ export function SetupView({
           >
             {busy ? <Spinner size="sm" /> : "Add Manuscript"}
           </button>
-          <button
-            className="rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm transition-colors hover:enabled:bg-white cursor-pointer disabled:opacity-50 dark:bg-surface-1"
-            type="button"
-            onClick={onUseFixture}
-            disabled={busy || !allowAddDocument}
-          >
-            Use Fixture
-          </button>
+          {import.meta.env.DEV ? (
+            <button
+              className="rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm transition-colors hover:enabled:bg-white cursor-pointer disabled:opacity-50 dark:bg-surface-1"
+              type="button"
+              onClick={onUseFixture}
+              disabled={busy || !allowAddDocument}
+            >
+              Use Fixture
+            </button>
+          ) : null}
         </div>
       </article>
 
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="m-0 text-sm font-semibold">3. Environment Diagnostics</h3>
-          {allowDiagnostics ? <StatusBadge label="ready" status="ok" /> : <StatusBadge label="blocked" status="warn" />}
+          <h3 className="m-0 text-sm font-semibold">3. Verify Setup</h3>
+          {allowDiagnostics ? <StatusBadge label="ready" status="ok" /> : <StatusBadge label="pending" status="warn" />}
         </div>
         {!allowDiagnostics ? (
           <p className="text-sm text-text-muted">Add at least one manuscript file before running diagnostics.</p>
@@ -201,24 +203,41 @@ export function SetupView({
           <EmptyState
             icon={FolderOpen}
             title="No Diagnostics Yet"
-            message="Diagnostics verify IPC, worker reachability, sqlite native module, and write permissions."
+            message="Checking that everything is working correctly..."
           />
         ) : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {(["ipc", "worker", "sqlite", "writable"] as const).map((key) => (
-              <div key={key} className="flex flex-col items-center gap-2 rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
-                <CheckCircle size={20} className={healthCheck[key] === "ok" ? "text-ok" : "text-danger"} />
-                <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{key}</span>
-                <StatusBadge label={healthCheck[key]} status={healthCheck[key]} />
-              </div>
-            ))}
+            {(["ipc", "worker", "sqlite", "writable"] as const).map((key) => {
+              const friendlyLabels: Record<string, string> = {
+                ipc: "App Communication",
+                worker: "Background Engine",
+                sqlite: "Database",
+                writable: "File Access"
+              };
+              const statusLabels: Record<string, string> = {
+                ok: "Connected",
+                down: "Unavailable",
+                error: "Error",
+                warn: "Pending"
+              };
+              return (
+                <div key={key} className="flex flex-col items-center gap-2 rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
+                  <CheckCircle size={20} className={healthCheck[key] === "ok" ? "text-ok" : "text-danger"} />
+                  <span className="text-xs font-medium tracking-wide text-text-muted">{friendlyLabels[key]}</span>
+                  <StatusBadge label={statusLabels[healthCheck[key]] ?? healthCheck[key]} status={healthCheck[key]} />
+                </div>
+              );
+            })}
             {healthCheck.recommendations.length > 0 ? (
               <div className="col-span-full rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
                 <h4 className="m-0 mb-2 text-sm font-semibold">Recommended Actions</h4>
                 <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
                   {healthCheck.recommendations.map((detail) => (
                     <li key={detail} className="text-sm text-text-secondary">
-                      {detail}
+                      {detail
+                        .replace("Launch CanonKeeper through Electron or attach the RPC bridge.", "Please launch CanonKeeper normally to connect all features.")
+                        .replace(/\bIPC\b/gi, "app communication")
+                        .replace(/\bRPC\b/gi, "connection")}
                     </li>
                   ))}
                 </ul>

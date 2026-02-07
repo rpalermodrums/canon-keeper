@@ -36,7 +36,7 @@ export function ExportView({
     <section className="flex flex-col gap-4">
       <header>
         <h2 className="m-0 font-display text-2xl font-bold">Exports</h2>
-        <p className="mt-1 text-sm text-text-muted">Run deterministic markdown/json exports with explicit progress receipts.</p>
+        <p className="mt-1 text-sm text-text-muted">Export your project data as Markdown or JSON files.</p>
       </header>
 
       <article className="flex flex-col gap-4 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
@@ -80,14 +80,14 @@ export function ExportView({
       </article>
 
       {!lastResult ? (
-        <EmptyState icon={Download} title="No Exports Yet" message="Run an export to see generated file paths and elapsed time." />
+        <EmptyState icon={Download} title="No Exports Yet" message="Choose a format and folder, then export your project data." />
       ) : lastResult.ok ? (
         <article className="flex flex-col gap-3 rounded-md border border-ok/30 bg-ok-soft/50 p-4 shadow-sm">
           <div className="flex items-center gap-2">
             <CheckCircle size={18} className="text-ok" />
             <h3 className="m-0 text-sm font-semibold text-ok-strong">Last Export Succeeded</h3>
           </div>
-          <p className="text-xs text-text-muted">Elapsed: {lastResult.elapsedMs} ms</p>
+          <p className="text-xs text-text-muted">Completed in {(lastResult.elapsedMs / 1000).toFixed(1)} seconds</p>
           <div className="flex flex-col gap-1.5">
             {lastResult.files.map((file) => (
               <div key={file} className="flex items-center justify-between gap-2 rounded-sm border border-border bg-surface-2/50 p-2 dark:bg-surface-1/30">

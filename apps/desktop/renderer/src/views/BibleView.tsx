@@ -44,8 +44,23 @@ const entityTypeColors: Record<string, string> = {
 const claimStatusOptions = [
   { value: "all" as const, label: "All" },
   { value: "confirmed" as const, label: "Confirmed" },
-  { value: "inferred" as const, label: "Inferred" }
+  { value: "inferred" as const, label: "Detected" }
 ];
+
+const formatClaimValue = (valueJson: string): string => {
+  try {
+    const parsed = JSON.parse(valueJson);
+    if (typeof parsed === "string") return parsed;
+    if (typeof parsed === "number" || typeof parsed === "boolean") return String(parsed);
+    if (Array.isArray(parsed)) return parsed.join(", ");
+    if (typeof parsed === "object" && parsed !== null) {
+      return Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join(", ");
+    }
+    return valueJson;
+  } catch {
+    return valueJson;
+  }
+};
 
 function groupByField(detail: EntityDetail | null): Array<{
   field: string;
@@ -90,9 +105,9 @@ export function BibleView({
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="m-0 font-display text-2xl font-bold">Book Bible</h2>
+          <h2 className="m-0 font-display text-2xl font-bold">Characters &amp; World</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Evidence-backed claims grouped by field. Confirmed canon supersedes inferred values.
+            Everything CanonKeeper knows about the people, places, and things in your story.
           </p>
         </div>
         <button
@@ -102,7 +117,7 @@ export function BibleView({
           disabled={busy}
         >
           <RefreshCw size={16} />
-          Refresh Entities
+          Refresh
         </button>
       </header>
 
@@ -114,7 +129,7 @@ export function BibleView({
           </select>
         </FilterGroup>
         <TogglePill
-          label="Claim Status"
+          label="Status"
           options={claimStatusOptions}
           value={filters.status}
           onChange={(v) => onFiltersChange({ ...filters, status: v })}
@@ -126,19 +141,19 @@ export function BibleView({
               className="w-full pl-8"
               value={filters.query}
               onChange={(e) => onFiltersChange({ ...filters, query: e.target.value })}
-              placeholder="Search entities"
+              placeholder="Search characters & places"
             />
           </div>
         </FilterGroup>
       </FilterBar>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={BookMarked} title="No Entities" message="Run extraction or relax filters to see entities." />
+        <EmptyState icon={BookMarked} title="Nothing Found" message="No characters or locations found yet. Add a manuscript and CanonKeeper will discover them." />
       ) : (
         <div className="grid min-h-[420px] grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(340px,1fr)]">
           {/* Entity list */}
           <article className="flex flex-col gap-2 rounded-md border border-border bg-white/75 p-3 shadow-sm dark:bg-surface-2/60">
-            <h3 className="m-0 mb-1 text-sm font-semibold">Entities</h3>
+            <h3 className="m-0 mb-1 text-sm font-semibold">Characters &amp; Places</h3>
             <div className="flex flex-col gap-1 overflow-y-auto">
               {filtered.map((entity) => {
                 const selected = selectedEntityId === entity.id;
@@ -167,9 +182,9 @@ export function BibleView({
           {/* Claims detail */}
           <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
             {!entityDetail ? (
-              <EmptyState icon={BookMarked} title="No Entity Selected" message="Select an entity to inspect grouped claims and evidence." />
+              <EmptyState icon={BookMarked} title="No Entry Selected" message="Select a character or location to see what CanonKeeper knows about them." />
             ) : groupedClaims.length === 0 ? (
-              <EmptyState icon={BookMarked} title="No Claims" message="This entity has no evidence-backed claims yet." />
+              <EmptyState icon={BookMarked} title="No Details" message="No details found for this entry yet." />
             ) : (
               <>
                 <h3 className="m-0 font-display text-lg font-bold">{entityDetail.entity.display_name}</h3>
@@ -182,7 +197,7 @@ export function BibleView({
                       {group.claims.map((claim) => (
                         <div key={claim.claim.id} className="rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/30">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-sm">{claim.claim.value_json}</span>
+                            <span className="text-sm">{formatClaimValue(claim.claim.value_json)}</span>
                             <StatusBadge
                               label={claim.claim.status}
                               status={claim.claim.status}
@@ -194,7 +209,7 @@ export function BibleView({
                               className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
                               type="button"
                               onClick={() =>
-                                onOpenEvidence(`${group.field} claim`, claim, { sourceId: claim.claim.id })
+                                onOpenEvidence(`${group.field}`, claim, { sourceId: claim.claim.id })
                               }
                               disabled={claim.evidence.length === 0}
                             >

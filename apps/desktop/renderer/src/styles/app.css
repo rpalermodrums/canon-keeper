@@ -7,56 +7,97 @@
   --font-display: "Fraunces", Georgia, serif;
   --font-mono: "IBM Plex Mono", "SF Mono", monospace;
 
-  /* ── Colors: Surfaces ── */
-  --color-surface-0: #f7f3eb;
-  --color-surface-1: #f2ecdf;
-  --color-surface-2: #fffdf8;
-  --color-surface-3: #e9dfcc;
+  /* ── Colors: Surfaces ("Morning Pages" -- warm whites and ivories) ── */
+  --color-surface-0: #FAF9F6;
+  --color-surface-1: #F4F2ED;
+  --color-surface-2: #FFFFFF;
+  --color-surface-3: #EDEAE4;
+  --color-surface-overlay: rgba(43, 43, 48, 0.45);
 
-  /* ── Colors: Text ── */
-  --color-text-primary: #1d2a2a;
-  --color-text-secondary: #334242;
-  --color-text-muted: #5f6f6f;
-  --color-text-inverse: #fffdf8;
+  /* ── Colors: Text (warm charcoals, no green tint) ── */
+  --color-text-primary: #2B2B30;
+  --color-text-secondary: #55545E;
+  --color-text-muted: #76757E;
+  --color-text-inverse: #FAFAF8;
+  --color-text-link: #6B4560;
 
-  /* ── Colors: Accent (teal — canon/confirmed) ── */
-  --color-accent: #0f5d5d;
-  --color-accent-strong: #0b4747;
-  --color-accent-soft: #d8ece8;
-  --color-accent-hover: #0a5050;
+  /* ── Colors: Accent (muted plum/wine -- literary, warm, distinctive) ── */
+  --color-accent: #7B506F;
+  --color-accent-strong: #5E3B55;
+  --color-accent-soft: #F0E6ED;
+  --color-accent-hover: #6B4560;
+  --color-accent-muted: #B899AE;
+  --color-accent-text: #5E3B55;
 
   /* ── Colors: Semantic ── */
-  --color-danger: #973131;
-  --color-danger-strong: #7a2020;
-  --color-danger-soft: #f4dfdf;
-  --color-warn: #8a5a05;
-  --color-warn-strong: #6e4804;
-  --color-warn-soft: #f8ecd8;
-  --color-ok: #245c3f;
-  --color-ok-strong: #1a4830;
-  --color-ok-soft: #e0efe7;
+  --color-ok: #4A7C5E;
+  --color-ok-strong: #38614A;
+  --color-ok-soft: #E5F0E9;
+  --color-ok-muted: #8BB89E;
+  --color-warn: #96720F;
+  --color-warn-strong: #7A5C08;
+  --color-warn-soft: #F7F0DE;
+  --color-warn-muted: #C4A84E;
+  --color-danger: #A0453A;
+  --color-danger-strong: #7E3530;
+  --color-danger-soft: #F5E5E3;
+  --color-danger-muted: #C8877F;
 
   /* ── Colors: Borders ── */
-  --color-border: #d8ccba;
-  --color-border-strong: #c4b8a4;
+  --color-border: #DDD9D2;
+  --color-border-strong: #C8C4BC;
   --color-border-focus: var(--color-accent);
 
-  /* ── Shadows (warm-tinted) ── */
-  --shadow-xs: 0 1px 2px rgba(18, 31, 31, 0.06);
-  --shadow-sm: 0 1px 2px rgba(18, 31, 31, 0.08), 0 4px 12px rgba(18, 31, 31, 0.04);
-  --shadow-md: 0 4px 10px rgba(18, 31, 31, 0.1), 0 10px 30px rgba(18, 31, 31, 0.08);
-  --shadow-lg: 0 8px 24px rgba(18, 31, 31, 0.12), 0 16px 48px rgba(18, 31, 31, 0.08);
+  /* ── Skeleton loading ── */
+  --color-skeleton-base: var(--color-surface-3);
+  --color-skeleton-shine: var(--color-surface-1);
+
+  /* ── Scrollbar ── */
+  --color-scrollbar-track: var(--color-surface-1);
+  --color-scrollbar-thumb: var(--color-border-strong);
+
+  /* ── Shadows (plum-tinted second layer) ── */
+  --shadow-xs: 0 1px 2px rgba(43, 43, 48, 0.06);
+  --shadow-sm: 0 1px 2px rgba(43, 43, 48, 0.07), 0 4px 12px rgba(123, 80, 111, 0.04);
+  --shadow-md: 0 4px 10px rgba(43, 43, 48, 0.08), 0 10px 30px rgba(123, 80, 111, 0.05);
+  --shadow-lg: 0 8px 24px rgba(43, 43, 48, 0.10), 0 16px 48px rgba(123, 80, 111, 0.06);
 
   /* ── Border Radii ── */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-full: 999px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── Spacing scale ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Typography ── */
+  --leading-tight: 1.2;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.72;
+  --tracking-tight: -0.012em;
+  --tracking-normal: 0.012em;
+  --tracking-wide: 0.06em;
+  --tracking-caps: 0.1em;
+
+  /* ── Transitions ── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-fast: 150ms var(--ease-out);
+  --transition-base: 250ms var(--ease-out);
+  --transition-slow: 400ms var(--ease-out);
 
   /* ── Animation tokens ── */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --animate-shimmer: shimmer 1.5s linear infinite;
   --animate-slide-in-right: slide-in-right 320ms ease-out;
   --animate-slide-in-up: slide-in-up 200ms ease-out;
@@ -70,38 +111,59 @@
 @variant dark (&:where(.dark, .dark *));
 
 .dark {
-  --color-surface-0: #141a1a;
-  --color-surface-1: #1a2222;
-  --color-surface-2: #212b2b;
-  --color-surface-3: #0f1414;
+  /* ── Surfaces ("Late Night Draft" -- warm darks, no green tint) ── */
+  --color-surface-0: #1A1A1F;
+  --color-surface-1: #222228;
+  --color-surface-2: #2C2C33;
+  --color-surface-3: #34343C;
+  --color-surface-overlay: rgba(0, 0, 0, 0.55);
 
-  --color-text-primary: #e8e4dc;
-  --color-text-secondary: #b8b2a6;
-  --color-text-muted: #7a7468;
-  --color-text-inverse: #141a1a;
+  /* ── Text (warm light tones) ── */
+  --color-text-primary: #EAEAE5;
+  --color-text-secondary: #B0AFA8;
+  --color-text-muted: #908F88;
+  --color-text-inverse: #1A1A1F;
+  --color-text-link: #CFA0C0;
 
-  --color-accent: #3db8a0;
-  --color-accent-strong: #5cd4bc;
-  --color-accent-soft: #1a3a34;
-  --color-accent-hover: #4dc4ac;
+  /* ── Accent (lighter plum for dark backgrounds) ── */
+  --color-accent: #C48DB5;
+  --color-accent-strong: #D8A8CB;
+  --color-accent-soft: #2E222B;
+  --color-accent-hover: #CFA0C0;
+  --color-accent-muted: #7A5A70;
+  --color-accent-text: #D8A8CB;
 
-  --color-danger: #e06060;
-  --color-danger-strong: #f07878;
-  --color-danger-soft: #3a1c1c;
-  --color-warn: #d4a020;
-  --color-warn-strong: #e0b040;
-  --color-warn-soft: #362e14;
-  --color-ok: #5cb88c;
-  --color-ok-strong: #78d4a8;
-  --color-ok-soft: #1a3428;
+  /* ── Semantic (brighter for dark mode readability) ── */
+  --color-ok: #6FB88A;
+  --color-ok-strong: #88D0A2;
+  --color-ok-soft: #1E2E24;
+  --color-ok-muted: #3E6B4E;
+  --color-warn: #D4A840;
+  --color-warn-strong: #E0BC58;
+  --color-warn-soft: #2E2818;
+  --color-warn-muted: #7A6520;
+  --color-danger: #D0605A;
+  --color-danger-strong: #E07872;
+  --color-danger-soft: #301C1A;
+  --color-danger-muted: #7A3835;
 
-  --color-border: #2e3838;
-  --color-border-strong: #3e4a4a;
+  /* ── Borders ── */
+  --color-border: #36363E;
+  --color-border-strong: #464650;
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15);
-  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35), 0 16px 48px rgba(0, 0, 0, 0.25);
+  /* ── Skeleton loading ── */
+  --color-skeleton-base: var(--color-surface-1);
+  --color-skeleton-shine: var(--color-surface-2);
+
+  /* ── Scrollbar ── */
+  --color-scrollbar-track: #151518;
+  --color-scrollbar-thumb: var(--color-border-strong);
+
+  /* ── Shadows (deeper opacity for dark mode) ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.28), 0 10px 30px rgba(0, 0, 0, 0.18);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.30), 0 16px 48px rgba(0, 0, 0, 0.22);
 }
 
 /* ── Keyframe definitions ── */
@@ -194,15 +256,15 @@
   body {
     @apply bg-surface-0 text-text-primary font-sans antialiased;
     background:
-      radial-gradient(circle at 10% 0%, rgba(15, 93, 93, 0.12), transparent 42%),
-      radial-gradient(circle at 90% 100%, rgba(138, 90, 5, 0.1), transparent 42%),
+      radial-gradient(circle at 10% 0%, rgba(123, 80, 111, 0.06), transparent 42%),
+      radial-gradient(circle at 90% 100%, rgba(176, 136, 48, 0.04), transparent 42%),
       var(--color-surface-0);
   }
 
   .dark body {
     background:
-      radial-gradient(circle at 10% 0%, rgba(61, 184, 160, 0.06), transparent 42%),
-      radial-gradient(circle at 90% 100%, rgba(212, 160, 32, 0.04), transparent 42%),
+      radial-gradient(circle at 10% 0%, rgba(196, 141, 181, 0.05), transparent 42%),
+      radial-gradient(circle at 90% 100%, rgba(212, 168, 64, 0.03), transparent 42%),
       var(--color-surface-0);
   }
 

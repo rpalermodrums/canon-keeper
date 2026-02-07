@@ -6,7 +6,6 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { InlineError } from "./components/InlineError";
 import { Sidebar } from "./components/Sidebar";
-import { StatusBadge } from "./components/StatusBadge";
 import { TopBar } from "./components/TopBar";
 import { useTheme } from "./context/ThemeContext";
 import { APP_SECTIONS, type AppSection, useCanonkeeperApp } from "./state/useCanonkeeperApp";
@@ -21,17 +20,6 @@ import { SetupView } from "./views/SetupView";
 import { StyleView } from "./views/StyleView";
 
 const mobileSections: AppSection[] = ["dashboard", "setup", "search", "scenes", "issues", "bible"];
-
-function formatLastSuccess(ts: string | null | undefined): string {
-  if (!ts) {
-    return "Never";
-  }
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) {
-    return ts;
-  }
-  return date.toLocaleString();
-}
 
 function sourceLabel(source: string, sourceId: string): string {
   const sourceName =
@@ -62,7 +50,7 @@ export function App(): JSX.Element {
     {
       id: "run.diagnostics",
       label: "Run Diagnostics",
-      subtitle: "Check IPC, worker, sqlite, and writable state",
+      subtitle: "Check that your project is working correctly",
       icon: RefreshCw,
       category: "Project",
       enabled: true
@@ -138,20 +126,6 @@ export function App(): JSX.Element {
           onToggleMobileNav={() => app.setMobileNavOpen((open) => !open)}
           onOpenCommandPalette={() => app.setCommandPaletteOpen(true)}
         />
-
-        <div className="border-b border-border bg-surface-2/60 px-5 py-2 text-xs text-text-secondary">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge label={`phase:${app.status?.phase ?? "idle"}`} status={app.status?.phase ?? "down"} />
-            <span>queue:{app.status?.queueDepth ?? 0}</span>
-            {app.status?.activeJobLabel ? <span>job:{app.status.activeJobLabel}</span> : null}
-            <span>last-success:{formatLastSuccess(app.status?.lastSuccessfulRunAt)}</span>
-            {app.status?.lastError ? (
-              <span className="rounded-sm border border-danger/25 bg-danger-soft px-2 py-0.5 text-danger">
-                {app.status.lastError.subsystem}: {app.status.lastError.message}
-              </span>
-            ) : null}
-          </div>
-        </div>
 
         <main className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"}`}>
           {app.error ? <InlineError error={app.error} onDismiss={app.clearError} onAction={app.onRunDiagnostics} /> : null}
@@ -350,15 +324,16 @@ export function App(): JSX.Element {
 
       <ConfirmModal
         open={Boolean(app.confirmClaimDraft)}
-        title="Confirm Canon Claim"
-        message="This creates a confirmed claim and supersedes inferred claims for the same field/value pair while preserving evidence links."
-        confirmLabel="Confirm Claim"
+        title="Confirm This Fact"
+        message="Mark this as confirmed. CanonKeeper will treat it as established fact for your story."
+        confirmLabel="Confirm"
         onCancel={() => app.setConfirmClaimDraft(null)}
         onConfirm={() => void app.onConfirmClaim()}
       >
         {app.confirmClaimDraft ? (
-          <div className="rounded-sm border border-border bg-surface-1 p-2 font-mono text-sm">
-            field={app.confirmClaimDraft.field}, evidence={app.confirmClaimDraft.evidenceCount}
+          <div className="rounded-sm border border-border bg-surface-1 p-2 text-sm">
+            <span className="font-medium text-text-primary">{app.confirmClaimDraft.field}</span>
+            <span className="ml-2 text-text-muted">{app.confirmClaimDraft.evidenceCount} {app.confirmClaimDraft.evidenceCount === 1 ? "reference" : "references"} found</span>
           </div>
         ) : null}
       </ConfirmModal>

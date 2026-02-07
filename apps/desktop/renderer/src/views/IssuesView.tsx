@@ -26,6 +26,16 @@ type IssuesViewProps = {
   onOpenEvidence: (title: string, issue: IssueSummary) => void;
 };
 
+const ISSUE_TYPE_LABELS: Record<string, string> = {
+  tone_drift: "Tone Shift",
+  dialogue_tic: "Dialogue Habit",
+  contradiction: "Contradiction",
+  timeline_error: "Timeline Issue",
+  character_inconsistency: "Character Inconsistency",
+  setting_error: "Setting Inconsistency",
+  repetition: "Repetition"
+};
+
 const severityBorderColor: Record<string, string> = {
   high: "border-l-danger",
   medium: "border-l-warn",
@@ -75,7 +85,7 @@ export function IssuesView({
         <div>
           <h2 className="m-0 font-display text-2xl font-bold">Issues</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Evidence-backed continuity and style triage. Dismiss requires a reason and supports undo.
+            Potential continuity issues found in your manuscript.
           </p>
         </div>
         <button
@@ -117,7 +127,7 @@ export function IssuesView({
           <select value={filters.type} onChange={(e) => onFiltersChange({ ...filters, type: e.target.value })}>
             <option value="">All</option>
             {knownTypes.map((type) => (
-              <option key={type} value={type}>{type}</option>
+              <option key={type} value={type}>{ISSUE_TYPE_LABELS[type] ?? type}</option>
             ))}
           </select>
         </FilterGroup>
@@ -140,7 +150,7 @@ export function IssuesView({
           title="No Matching Issues"
           message={filters.status !== "open" || filters.severity !== "all" || filters.query
             ? "Adjust filters to see more issues."
-            : "Ingest additional evidence-backed documents to generate issues."
+            : "No issues found. Add more manuscript files to check for continuity problems."
           }
         />
       ) : (
@@ -169,7 +179,7 @@ export function IssuesView({
                 </div>
 
                 <div className="mt-2 flex items-center justify-between gap-3">
-                  <span className="font-mono text-xs text-text-muted">{issue.type}</span>
+                  <span className="text-xs text-text-muted">{ISSUE_TYPE_LABELS[issue.type] ?? issue.type}</span>
                   <div className="flex items-center gap-1.5">
                     <button
                       className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
@@ -204,8 +214,8 @@ export function IssuesView({
                   <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
                     {issue.evidence.slice(0, 2).map((item, idx) => (
                       <div key={`${issue.id}-e-${idx}`} className="rounded-sm border border-border bg-surface-1/30 p-2 dark:bg-surface-1/20">
-                        <div className="font-mono text-xs text-text-muted">
-                          {item.documentPath ?? "unknown"} | chunk {item.chunkOrdinal ?? "?"}
+                        <div className="text-xs text-text-muted">
+                          {(item.documentPath ?? "unknown").split("/").pop()} | Passage {item.chunkOrdinal ?? "?"}
                         </div>
                         <div className="mt-1 border-l-2 border-accent pl-2 text-xs italic text-text-secondary">
                           &quot;{item.excerpt}&quot;

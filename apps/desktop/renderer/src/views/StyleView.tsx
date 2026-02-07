@@ -36,7 +36,7 @@ function toRepetitionEntries(report: StyleReport | null): RepetitionEntry[] {
 
 const sortOptions = [
   { value: "count" as const, label: "Count" },
-  { value: "ngram" as const, label: "Ngram" }
+  { value: "ngram" as const, label: "Phrase" }
 ];
 
 export function StyleView({
@@ -65,7 +65,7 @@ export function StyleView({
         <div>
           <h2 className="m-0 font-display text-2xl font-bold">Style Report</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Diagnostic-only style signals across repetition, tone drift, and dialogue tics.
+            Patterns in your writing style — repeated phrases, tone shifts, and dialogue habits.
           </p>
         </div>
         <button
@@ -80,7 +80,7 @@ export function StyleView({
       </header>
 
       {!report ? (
-        <EmptyState icon={Palette} title="No Style Data" message="Run style stage by ingesting documents first." />
+        <EmptyState icon={Palette} title="No Style Data" message="Add a manuscript to see your writing style patterns." />
       ) : (
         <>
           {/* Repetition */}
@@ -100,7 +100,7 @@ export function StyleView({
                 <table>
                   <thead>
                     <tr>
-                      <th>Ngram</th>
+                      <th>Repeated Phrase</th>
                       <th>Count</th>
                       <th className="w-36">Frequency</th>
                       <th>Evidence</th>
@@ -156,10 +156,10 @@ export function StyleView({
           <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
             <div className="flex items-center gap-2">
               <Activity size={16} className="text-text-muted" />
-              <h3 className="m-0 text-sm font-semibold">Tone Drift</h3>
+              <h3 className="m-0 text-sm font-semibold">Tone Shifts</h3>
             </div>
             {toneIssues.length === 0 ? (
-              <p className="text-sm text-text-muted">No tone drift issues detected.</p>
+              <p className="text-sm text-text-muted">No tone shift issues detected.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {toneIssues.map((issue) => (
@@ -186,10 +186,10 @@ export function StyleView({
           <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
             <div className="flex items-center gap-2">
               <MessageSquare size={16} className="text-text-muted" />
-              <h3 className="m-0 text-sm font-semibold">Dialogue Tics</h3>
+              <h3 className="m-0 text-sm font-semibold">Dialogue Habits</h3>
             </div>
             {dialogueIssues.length === 0 ? (
-              <p className="text-sm text-text-muted">No dialogue tic issues detected.</p>
+              <p className="text-sm text-text-muted">No dialogue habit issues detected.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {dialogueIssues.map((issue) => (

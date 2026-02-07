@@ -14,6 +14,21 @@ type SettingsViewProps = {
   onSidebarCollapsedChange: (collapsed: boolean) => void;
 };
 
+const WORKER_STATE_LABELS: Record<string, string> = {
+  idle: "System is ready",
+  busy: "Processing your manuscript",
+  restarting: "Restarting...",
+  down: "Not responding",
+  disconnected: "Not responding"
+};
+
+const HEALTH_KEY_LABELS: Record<string, string> = {
+  ipc: "Messaging",
+  worker: "Background Engine",
+  sqlite: "Database",
+  writable: "File Access"
+};
+
 export function SettingsView({
   status,
   healthCheck,
@@ -26,8 +41,8 @@ export function SettingsView({
   return (
     <section className="flex flex-col gap-4">
       <header>
-        <h2 className="m-0 font-display text-2xl font-bold">Settings and Diagnostics</h2>
-        <p className="mt-1 text-sm text-text-muted">Environment checks, appearance, and runtime health summary.</p>
+        <h2 className="m-0 font-display text-2xl font-bold">Settings</h2>
+        <p className="mt-1 text-sm text-text-muted">Appearance, export, and system information.</p>
       </header>
 
       {/* Appearance */}
@@ -55,11 +70,11 @@ export function SettingsView({
 
       {/* Runtime */}
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 text-sm font-semibold">Runtime</h3>
+        <h3 className="m-0 text-sm font-semibold">System Status</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge label={status?.state ?? "disconnected"} status={status?.state ?? "down"} />
+          <StatusBadge label={WORKER_STATE_LABELS[status?.state ?? "disconnected"] ?? status?.state ?? "Not responding"} status={status?.state ?? "down"} />
           {status?.workerState ? (
-            <StatusBadge label={status.workerState} status={status.workerState} />
+            <StatusBadge label={WORKER_STATE_LABELS[status.workerState] ?? status.workerState} status={status.workerState} />
           ) : null}
         </div>
         <button
@@ -80,8 +95,8 @@ export function SettingsView({
             {(["ipc", "worker", "sqlite", "writable"] as const).map((key) => (
               <div key={key} className="flex flex-col items-center gap-2 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
                 <CheckCircle size={20} className={healthCheck[key] === "ok" ? "text-ok" : "text-danger"} />
-                <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{key}</span>
-                <StatusBadge label={healthCheck[key]} status={healthCheck[key]} />
+                <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{HEALTH_KEY_LABELS[key] ?? key}</span>
+                <StatusBadge label={({ ok: "Connected", down: "Unavailable", error: "Error", warn: "Pending" } as Record<string, string>)[healthCheck[key]] ?? healthCheck[key]} status={healthCheck[key]} />
               </div>
             ))}
           </div>
@@ -89,7 +104,10 @@ export function SettingsView({
             <div className="flex flex-col gap-1.5">
               {(healthCheck.recommendations ?? healthCheck.details).map((detail) => (
                 <div key={detail} className="rounded-sm border border-border bg-surface-1/30 p-2 text-sm text-text-secondary dark:bg-surface-1/20">
-                  {detail}
+                  {detail
+                    .replace("Launch CanonKeeper through Electron or attach the RPC bridge.", "Please launch CanonKeeper normally to connect all features.")
+                    .replace(/\bIPC\b/gi, "app communication")
+                    .replace(/\bRPC\b/gi, "connection")}
                 </div>
               ))}
             </div>

@@ -16,13 +16,12 @@ type EvidenceDrawerProps = {
 };
 
 function locationLabel(item: EvidenceItem): string {
-  const pathPart = item.documentPath ?? "unknown document";
-  const chunkPart = item.chunkOrdinal !== null ? `chunk ${item.chunkOrdinal}` : "chunk ?";
+  const filename = (item.documentPath ?? "unknown document").split("/").pop()!;
   const linePart =
     item.lineStart !== null
-      ? `line ${item.lineStart}${item.lineEnd && item.lineEnd !== item.lineStart ? `-${item.lineEnd}` : ""}`
-      : "line ?";
-  return `${pathPart} | ${chunkPart} | ${linePart}`;
+      ? `lines ${item.lineStart}${item.lineEnd && item.lineEnd !== item.lineStart ? `-${item.lineEnd}` : ""}`
+      : null;
+  return linePart ? `${filename}, ${linePart}` : filename;
 }
 
 export function EvidenceDrawer({
@@ -158,9 +157,6 @@ export function EvidenceDrawer({
                   </div>
                   <div className="mt-2 border-l-3 border-accent pl-3 text-sm italic text-text-secondary">
                     &quot;{item.excerpt}&quot;
-                  </div>
-                  <div className="mt-1.5 font-mono text-xs text-text-muted">
-                    span {item.quoteStart}-{item.quoteEnd}
                   </div>
                 </article>
               ))}

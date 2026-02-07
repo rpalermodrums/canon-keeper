@@ -10,7 +10,7 @@ total_tokens: 179698
 
 ## System Overview
 
-CanonKeeper is a local-first Electron desktop app for fiction writers. It ingests manuscripts **read-only** and produces evidence-backed editorial diagnostics (Book Bible, scene index, style analysis, continuity issues, Q&A).
+CanonKeeper is a local-first Electron desktop app for fiction writers. It ingests manuscripts **read-only** and produces evidence-backed editorial diagnostics (Characters & World, scene index, style analysis, continuity issues, Q&A).
 
 ```mermaid
 graph TB
@@ -216,13 +216,13 @@ All access through repository pattern in `worker/storage/`:
 
 | View | Purpose |
 |------|---------|
-| `DashboardView` | Pipeline status, continue actions, event log |
+| `DashboardView` | Activity status, continue actions, event log |
 | `SetupView` | Onboarding wizard (project → document → diagnostics) |
 | `SearchView` | FTS search + LLM Q&A |
 | `ScenesView` | Scene index with POV/setting metadata |
 | `IssuesView` | Continuity/style issue triage with filters |
 | `StyleView` | Repetition table, tone drift, dialogue tics |
-| `BibleView` | Entity book bible with evidence-backed claims |
+| `BibleView` | Characters & World with evidence-backed claims |
 | `ExportView` | Markdown/JSON export |
 | `SettingsView` | Runtime health, theme, diagnostics |
 

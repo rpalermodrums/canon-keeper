@@ -32,7 +32,7 @@ Pre-commit hooks (lefthook): lint + typecheck. Pre-push: tests. All via Docker b
 
 ## Architecture
 
-CanonKeeper is a local-first Electron desktop app for fiction writers. It ingests manuscripts **read-only** and produces evidence-backed editorial diagnostics (Book Bible, scene index, style analysis, continuity issues, Q&A).
+CanonKeeper is a local-first Electron desktop app for fiction writers. It ingests manuscripts **read-only** and produces evidence-backed editorial diagnostics (Characters & World, scene index, style analysis, continuity issues, Q&A).
 
 ### Process model (three processes)
 

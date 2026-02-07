@@ -17,12 +17,12 @@ type ScenesViewProps = {
 
 function unknownReason(scene: SceneSummary): string {
   if (scene.pov_mode === "unknown") {
-    return "POV heuristic found no first-person or explicit narrator marker.";
+    return "Point of view could not be determined automatically.";
   }
   if (!scene.setting_text && !scene.setting_entity_id) {
-    return "No setting entity matched scene text with deterministic rules.";
+    return "Setting could not be identified automatically.";
   }
-  return "Evidence-backed classification available.";
+  return "";
 }
 
 export function ScenesView({
@@ -46,7 +46,7 @@ export function ScenesView({
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="m-0 font-display text-2xl font-bold">Scenes</h2>
-          <p className="mt-1 text-sm text-text-muted">Split view for scene index and deterministic metadata evidence.</p>
+          <p className="mt-1 text-sm text-text-muted">Browse your scenes, settings, and point of view.</p>
         </div>
         <button
           className="inline-flex items-center gap-1.5 rounded-sm border border-accent bg-accent px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-accent-strong cursor-pointer disabled:opacity-50"
@@ -74,7 +74,7 @@ export function ScenesView({
         <EmptyState
           icon={BookOpen}
           title="No Scenes Yet"
-          message="Run ingestion and scene stage first. Unknown metadata is still shown so you can triage gaps."
+          message="No scenes found yet. Add a manuscript to see your story's scene breakdown."
         />
       ) : (
         <div className="grid min-h-[420px] grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(340px,1fr)]">
@@ -104,7 +104,7 @@ export function ScenesView({
                     >
                       <td>
                         <strong>#{scene.ordinal}</strong> {scene.title ?? "Untitled"}
-                        <div className="mt-0.5 text-xs text-text-muted">{unknownReason(scene)}</div>
+                        {unknownReason(scene) ? <div className="mt-0.5 text-xs text-text-muted">{unknownReason(scene)}</div> : null}
                       </td>
                       <td>
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -132,7 +132,7 @@ export function ScenesView({
               <EmptyState
                 icon={BookOpen}
                 title="No Scene Selected"
-                message="Select a scene row to inspect chunk ranges and evidence-backed metadata."
+                message="Select a scene to see its details."
               />
             ) : (
               <>
@@ -140,11 +140,8 @@ export function ScenesView({
                   Scene {sceneDetail.scene.ordinal}: {sceneDetail.scene.title ?? "Untitled"}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full bg-surface-1 px-2.5 py-0.5 text-xs font-medium dark:bg-surface-2">
-                    Range {sceneDetail.scene.start_char}-{sceneDetail.scene.end_char}
-                  </span>
                   <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent">
-                    POV {sceneDetail.scene.pov_mode}
+                    POV: {sceneDetail.scene.pov_mode}
                   </span>
                   <span className="rounded-full bg-surface-1 px-2.5 py-0.5 text-xs font-medium dark:bg-surface-2">
                     Setting {sceneDetail.scene.setting_text ?? "unknown"}
@@ -163,7 +160,7 @@ export function ScenesView({
                   {sceneDetail.chunks.slice(0, 6).map((chunk) => (
                     <div key={chunk.id} className="rounded-sm border-l-3 border-l-accent bg-surface-1/50 p-3 dark:bg-surface-2/30">
                       <div className="font-mono text-xs text-text-muted">
-                        chunk {chunk.ordinal} | {chunk.start_char}-{chunk.end_char}
+                        Passage {chunk.ordinal}
                       </div>
                       <div className="mt-1 text-sm text-text-secondary">{chunk.text.slice(0, 180)}</div>
                     </div>
