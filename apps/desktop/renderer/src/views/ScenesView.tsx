@@ -4,6 +4,7 @@ import { Spinner } from "../components/Spinner";
 import type { SceneDetail, SceneSummary } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
+import { confidenceLabel, filterScenes, formatPovDisplay, unknownReason } from "./scenesViewUtils";
 
 type ScenesViewProps = {
   busy: boolean;
@@ -17,23 +18,6 @@ type ScenesViewProps = {
   onSelectScene: (sceneId: string) => void;
   onOpenEvidence: (title: string, sceneDetail: SceneDetail) => void;
 };
-
-function unknownReason(scene: SceneSummary): string {
-  if (scene.pov_mode === "unknown") {
-    return "Point of view could not be determined automatically.";
-  }
-  if (!scene.setting_text && !scene.setting_entity_id) {
-    return "Setting could not be identified automatically.";
-  }
-  return "";
-}
-
-function confidenceLabel(value: number | null): string {
-  if (value === null) return "unknown";
-  if (value >= 0.8) return "high";
-  if (value >= 0.5) return "medium";
-  return "low";
-}
 
 function ScenesSkeleton(): JSX.Element {
   return (
@@ -68,10 +52,7 @@ export function ScenesView({
     return <ScenesSkeleton />;
   }
 
-  const filtered = scenes.filter((scene) => {
-    const haystack = `${scene.ordinal} ${scene.title ?? ""} ${scene.pov_mode} ${scene.setting_text ?? ""}`.toLowerCase();
-    return haystack.includes(query.toLowerCase().trim());
-  });
+  const filtered = filterScenes(scenes, query);
 
   return (
     <section className="flex flex-col gap-4">
@@ -123,6 +104,7 @@ export function ScenesView({
               <tbody>
                 {filtered.map((scene) => {
                   const selected = scene.id === selectedSceneId;
+                  const reason = unknownReason(scene);
                   return (
                     <tr
                       key={scene.id}
@@ -139,13 +121,13 @@ export function ScenesView({
                     >
                       <td>
                         <strong>#{scene.ordinal}</strong> {scene.title ?? "Untitled"}
-                        {unknownReason(scene) ? <div className="mt-0.5 text-xs text-text-muted">{unknownReason(scene)}</div> : null}
+                        {reason ? <div className="mt-0.5 text-xs text-text-muted">{reason}</div> : null}
                       </td>
                       <td>
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           scene.pov_mode === "unknown" ? "bg-warn-soft text-warn" : "bg-accent-soft text-accent"
                         }`}>
-                          {scene.pov_mode ?? "unknown"}
+                          {formatPovDisplay(scene.pov_mode)}
                         </span>
                       </td>
                       <td>
@@ -181,7 +163,7 @@ export function ScenesView({
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-medium text-accent">
-                    POV: {sceneDetail.scene.pov_mode}
+                    POV: {formatPovDisplay(sceneDetail.scene.pov_mode)}
                   </span>
                   <span className="rounded-full bg-surface-1 px-2.5 py-0.5 text-xs font-medium dark:bg-surface-2">
                     Setting {sceneDetail.scene.setting_text ?? "unknown"}

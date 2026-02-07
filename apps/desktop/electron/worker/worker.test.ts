@@ -55,6 +55,8 @@ type DispatchCase = {
   assertResult: (result: unknown, ctx: DispatchCaseContext) => void;
 };
 
+type RpcMessageInput = Parameters<typeof handleRpcMessage>[0];
+
 const fixtureDir = path.resolve(process.cwd(), "data", "fixtures");
 const tempRoots: string[] = [];
 
@@ -707,5 +709,434 @@ describe("worker busy tracking", () => {
     const finalStatus = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
     expect(finalStatus.state).toBe("idle");
     expect(finalStatus.lastJob).toBe("project.addDocument");
+  });
+});
+
+describe("worker session lifecycle edge cases", () => {
+  it("returns an error response when project.close is requested without a session", async () => {
+    expect(__testHooks.getSession()).toBeNull();
+
+    const response = await handleRpcMessage({
+      id: "close-no-session",
+      method: "project.close"
+    });
+
+    expect(response).toEqual({
+      id: "close-no-session",
+      error: { message: "Unknown method: project.close" }
+    });
+    expect(__testHooks.getSession()).toBeNull();
+  });
+
+  it("reuses the existing session when project.createOrOpen targets the same root", async () => {
+    const rootPath = makeTempRoot("session-reuse");
+
+    const firstProject = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Session Reuse"
+    })) as ProjectSummary;
+
+    const firstSession = __testHooks.getSession();
+    if (!firstSession) {
+      throw new Error("Expected active session after opening project");
+    }
+
+    const stopSpy = vi.spyOn(firstSession.queue, "stop");
+    const closeSpy = vi.spyOn(firstSession.watcher, "close");
+
+    const secondProject = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Session Reuse"
+    })) as ProjectSummary;
+
+    const secondSession = __testHooks.getSession();
+    expect(secondProject.id).toBe(firstProject.id);
+    expect(secondSession).toBe(firstSession);
+    expect(stopSpy).not.toHaveBeenCalled();
+    expect(closeSpy).not.toHaveBeenCalled();
+  });
+
+  it("tears down and replaces the session when project.createOrOpen switches roots", async () => {
+    const rootA = makeTempRoot("session-switch-a");
+    const rootB = makeTempRoot("session-switch-b");
+
+    const projectA = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath: rootA,
+      name: "Session Switch A"
+    })) as ProjectSummary;
+    expect(projectA.root_path).toBe(path.resolve(rootA));
+
+    const sessionA = __testHooks.getSession();
+    if (!sessionA) {
+      throw new Error("Expected active session for root A");
+    }
+
+    const stopSpyA = vi.spyOn(sessionA.queue, "stop");
+    const closeSpyA = vi.spyOn(sessionA.watcher, "close");
+
+    const projectB = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath: rootB,
+      name: "Session Switch B"
+    })) as ProjectSummary;
+
+    const sessionB = __testHooks.getSession();
+    if (!sessionB) {
+      throw new Error("Expected active session for root B");
+    }
+
+    expect(projectB.root_path).toBe(path.resolve(rootB));
+    expect(stopSpyA).toHaveBeenCalledOnce();
+    expect(closeSpyA).toHaveBeenCalledOnce();
+    expect(sessionB).not.toBe(sessionA);
+    expect(() => sessionA.handle.db.prepare("SELECT 1 AS ok").get()).toThrow();
+  });
+
+  it("allows double close without throwing and leaves session cleared", async () => {
+    const rootPath = makeTempRoot("session-double-close");
+    await __testHooks.ensureSession(rootPath);
+
+    await __testHooks.teardownSession();
+    await expect(__testHooks.teardownSession()).resolves.toBeUndefined();
+    expect(__testHooks.getSession()).toBeNull();
+  });
+});
+
+describe("worker RPC error serialization", () => {
+  it("serializes unknown namespace/method errors into response.error", async () => {
+    const response = await handleRpcMessage({
+      id: "unknown-method",
+      method: "unknown.namespace"
+    });
+
+    expect(response).toEqual({
+      id: "unknown-method",
+      error: { message: "Unknown method: unknown.namespace" }
+    });
+  });
+
+  it("serializes non-Error throws as Unknown error", async () => {
+    const rootPath = makeTempRoot("rpc-non-error");
+    await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Non Error Serialization"
+    });
+
+    vi.spyOn(fs, "existsSync").mockImplementation(() => {
+      throw "filesystem unavailable";
+    });
+
+    const response = await handleRpcMessage({
+      id: "non-error-throw",
+      method: "project.addDocument",
+      params: { path: path.join(rootPath, "missing.md") }
+    });
+
+    expect(response).toEqual({
+      id: "non-error-throw",
+      error: { message: "Unknown error" }
+    });
+  });
+
+  it("returns null for invalid RPC message shapes", async () => {
+    const missingId = await handleRpcMessage({
+      method: "project.getStatus"
+    } as unknown as RpcMessageInput);
+    const missingMethod = await handleRpcMessage({
+      id: "missing-method"
+    } as unknown as RpcMessageInput);
+    const nonObject = await handleRpcMessage("invalid-message" as unknown as RpcMessageInput);
+
+    expect(missingId).toBeNull();
+    expect(missingMethod).toBeNull();
+    expect(nonObject).toBeNull();
+  });
+
+  it("keeps export.run domain failures in result payload instead of response.error", async () => {
+    const rootPath = makeTempRoot("rpc-export-failure");
+    await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Export Failure Serialization"
+    });
+
+    vi.spyOn(fs, "mkdirSync").mockImplementation((..._args: Parameters<typeof fs.mkdirSync>) => {
+      throw new Error("mkdir blocked");
+    });
+
+    const response = await handleRpcMessage({
+      id: "export-failure",
+      method: "export.run",
+      params: { outDir: path.join(rootPath, "exports"), kind: "json" }
+    });
+
+    if (!response) {
+      throw new Error("Expected RPC response");
+    }
+
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({ ok: false, error: "mkdir blocked" });
+  });
+});
+
+describe("worker progress reporting", () => {
+  it("exposes ingest stage progress through subscribeStatus while addDocument is in-flight", async () => {
+    const rootPath = makeTempRoot("progress-status");
+    const filePath = path.join(rootPath, "progress.md");
+    fs.writeFileSync(filePath, "# Progress\n\nshort text", "utf8");
+
+    const project = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Progress Status"
+    })) as ProjectSummary;
+
+    const activeSession = __testHooks.getSession();
+    if (!activeSession) {
+      throw new Error("Expected active session");
+    }
+
+    vi.spyOn(activeSession.queue, "enqueue").mockImplementation((job, dedupeKey, awaitResult) => {
+      if (awaitResult !== true) {
+        return null;
+      }
+      const delayedResult: IngestResult = {
+        documentId: `${project.id}-doc`,
+        snapshotId: `${project.id}-snapshot`,
+        snapshotCreated: true,
+        chunksCreated: 1,
+        chunksUpdated: 0,
+        chunksDeleted: 0,
+        changeStart: 0,
+        changeEnd: 0
+      };
+      void job;
+      void dedupeKey;
+      return new Promise((resolve) => {
+        setTimeout(() => resolve(delayedResult), 120);
+      });
+    });
+
+    const requestPromise = handleRpcMessage({
+      id: "progress-request",
+      method: "project.addDocument",
+      params: { path: filePath }
+    });
+
+    await sleep(20);
+
+    const subscribedStatus = (await __testHooks.dispatch("project.subscribeStatus")) as WorkerStatus;
+    const polledStatus = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
+
+    expect(subscribedStatus.state).toBe("busy");
+    expect(subscribedStatus.phase).toBe("ingest");
+    expect(subscribedStatus.lastJob).toBe("project.addDocument");
+    expect(subscribedStatus.activeJobLabel).toBe("Ingest manuscript");
+
+    expect(polledStatus.state).toBe("busy");
+    expect(polledStatus.phase).toBe("ingest");
+
+    const response = await requestPromise;
+    expect(response).toEqual(
+      expect.objectContaining({ id: "progress-request", result: expect.objectContaining({ snapshotCreated: true }) })
+    );
+  });
+
+  it("propagates stage-specific labels across scenes/style/extraction/continuity jobs", async () => {
+    const rootPath = makeTempRoot("progress-stages");
+    const filePath = copyFixture(rootPath, "contradiction.md");
+
+    const project = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Progress Stages"
+    })) as ProjectSummary;
+
+    const activeSession = __testHooks.getSession();
+    if (!activeSession) {
+      throw new Error("Expected active session");
+    }
+
+    const ingest = await ingestDocument(activeSession.handle.db, {
+      projectId: project.id,
+      rootPath,
+      filePath
+    });
+
+    vi.spyOn(activeSession.queue, "enqueue").mockReturnValue(null);
+
+    const scenesPayload: Extract<WorkerJob, { type: "RUN_SCENES" }>["payload"] = {
+      projectId: project.id,
+      documentId: ingest.documentId,
+      snapshotId: ingest.snapshotId,
+      rootPath
+    };
+    await __testHooks.handleJob({ type: "RUN_SCENES", payload: scenesPayload });
+    const scenesStatus = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
+    expect(scenesStatus.lastJob).toBe("RUN_SCENES");
+    expect(scenesStatus.activeJobLabel).toBe("Rebuild scene index");
+
+    const stylePayload: Extract<WorkerJob, { type: "RUN_STYLE" }>["payload"] = {
+      projectId: project.id,
+      documentId: ingest.documentId,
+      snapshotId: ingest.snapshotId,
+      rootPath
+    };
+    await __testHooks.handleJob({ type: "RUN_STYLE", payload: stylePayload });
+    const styleStatus = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
+    expect(styleStatus.lastJob).toBe("RUN_STYLE");
+    expect(styleStatus.activeJobLabel).toBe("Refresh style diagnostics");
+
+    const extractionPayload: Extract<WorkerJob, { type: "RUN_EXTRACTION" }>["payload"] = {
+      projectId: project.id,
+      documentId: ingest.documentId,
+      snapshotId: ingest.snapshotId,
+      rootPath,
+      changeStart: ingest.changeStart,
+      changeEnd: ingest.changeEnd
+    };
+    await __testHooks.handleJob({ type: "RUN_EXTRACTION", payload: extractionPayload });
+    const extractionStatus = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
+    expect(extractionStatus.lastJob).toBe("RUN_EXTRACTION");
+    expect(extractionStatus.activeJobLabel).toBe("Extract entities and claims");
+
+    const continuityPayload: Extract<WorkerJob, { type: "RUN_CONTINUITY" }>["payload"] = {
+      projectId: project.id,
+      documentId: ingest.documentId,
+      snapshotId: ingest.snapshotId,
+      rootPath,
+      entityIds: []
+    };
+    await __testHooks.handleJob({ type: "RUN_CONTINUITY", payload: continuityPayload });
+    const continuityStatus = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
+    expect(continuityStatus.lastJob).toBe("RUN_CONTINUITY");
+    expect(continuityStatus.activeJobLabel).toBe("Run continuity checks");
+  });
+
+  it("records export stage metadata after export.run completes", async () => {
+    const rootPath = makeTempRoot("progress-export");
+    const exportDir = path.join(rootPath, "exports");
+
+    await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Progress Export"
+    });
+
+    const response = await handleRpcMessage({
+      id: "progress-export-run",
+      method: "export.run",
+      params: { outDir: exportDir, kind: "json" }
+    });
+
+    expect(response).toEqual(
+      expect.objectContaining({ id: "progress-export-run", result: expect.objectContaining({ ok: true }) })
+    );
+
+    const statusAfterExport = (await __testHooks.dispatch("project.getStatus")) as WorkerStatus;
+    expect(statusAfterExport.lastJob).toBe("export.run");
+    expect(statusAfterExport.activeJobLabel).toBe("Export project");
+  });
+});
+
+describe("worker concurrent RPC handling", () => {
+  it("resolves simultaneous requests to the same namespace", async () => {
+    const rootPath = makeTempRoot("concurrent-search");
+    const filePath = copyFixture(rootPath, "simple_md.md");
+
+    const project = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath,
+      name: "Concurrent Search"
+    })) as ProjectSummary;
+
+    const activeSession = __testHooks.getSession();
+    if (!activeSession) {
+      throw new Error("Expected active session");
+    }
+
+    await ingestDocument(activeSession.handle.db, {
+      projectId: project.id,
+      rootPath,
+      filePath
+    });
+
+    const ids = ["1", "2", "3", "4"];
+    const responses = await Promise.all(
+      ids.map((suffix) =>
+        handleRpcMessage({
+          id: `search-${suffix}`,
+          method: "search.query",
+          params: { query: "Mira" }
+        })
+      )
+    );
+
+    for (const response of responses) {
+      expect(response).not.toBeNull();
+      expect(response).toEqual(
+        expect.objectContaining({
+          id: expect.stringMatching(/^search-/),
+          result: expect.objectContaining({ query: "Mira", results: expect.any(Array) })
+        })
+      );
+    }
+  });
+
+  it("returns a deterministic response for requests issued during session transition", async () => {
+    const rootA = makeTempRoot("concurrent-transition-a");
+    const rootB = makeTempRoot("concurrent-transition-b");
+    const filePathA = copyFixture(rootA, "simple_md.md");
+
+    const projectA = (await __testHooks.dispatch("project.createOrOpen", {
+      rootPath: rootA,
+      name: "Concurrent Transition A"
+    })) as ProjectSummary;
+
+    const sessionA = __testHooks.getSession();
+    if (!sessionA) {
+      throw new Error("Expected active session for root A");
+    }
+
+    await ingestDocument(sessionA.handle.db, {
+      projectId: projectA.id,
+      rootPath: rootA,
+      filePath: filePathA
+    });
+
+    const closeSpy = vi.spyOn(sessionA.watcher, "close").mockImplementation(async () => {
+      await sleep(120);
+    });
+
+    const transitionPromise = handleRpcMessage({
+      id: "transition-open-b",
+      method: "project.createOrOpen",
+      params: { rootPath: rootB, name: "Concurrent Transition B" }
+    });
+    await sleep(20);
+    const duringTransitionPromise = handleRpcMessage({
+      id: "transition-search",
+      method: "search.query",
+      params: { query: "Mira" }
+    });
+
+    const [transitionResponse, duringTransitionResponse] = await Promise.all([
+      transitionPromise,
+      duringTransitionPromise
+    ]);
+
+    expect(closeSpy).toHaveBeenCalledOnce();
+    expect(transitionResponse).toEqual(
+      expect.objectContaining({
+        id: "transition-open-b",
+        result: expect.objectContaining({ root_path: path.resolve(rootB) })
+      })
+    );
+
+    if (!duringTransitionResponse) {
+      throw new Error("Expected response during transition");
+    }
+
+    if (duringTransitionResponse.result) {
+      expect(duringTransitionResponse.result).toEqual(
+        expect.objectContaining({ query: "Mira", results: expect.any(Array) })
+      );
+    } else {
+      expect(duringTransitionResponse.error?.message).toMatch(/Project not initialized|database/i);
+    }
   });
 });

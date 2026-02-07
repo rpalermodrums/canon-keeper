@@ -5,21 +5,17 @@ import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import { Spinner } from "../components/Spinner";
 import { TogglePill } from "../components/TogglePill";
-
-type RepetitionEntry = {
-  ngram: string;
-  count: number;
-  examples?: Array<{
-    chunkId: string;
-    quoteStart: number;
-    quoteEnd: number;
-    documentPath?: string | null;
-    chunkOrdinal?: number | null;
-    excerpt?: string;
-    lineStart?: number | null;
-    lineEnd?: number | null;
-  }>;
-};
+import {
+  examplesToEvidenceItems,
+  findSceneEvidenceId,
+  getMaxRepetitionCount,
+  getRepetitionToggleLabel,
+  getVisibleRepetitionEntries,
+  partitionStyleIssues,
+  sortRepetitionEntries,
+  toRepetitionEntries,
+  type RepetitionSort
+} from "./styleViewUtils";
 
 type StyleViewProps = {
   busy: boolean;
@@ -31,12 +27,6 @@ type StyleViewProps = {
   onOpenMetricEvidence: (title: string, evidence: EvidenceItem[]) => void;
   onNavigateToScene?: (sceneId: string) => void;
 };
-
-function toRepetitionEntries(report: StyleReport | null): RepetitionEntry[] {
-  if (!report?.repetition || typeof report.repetition !== "object") return [];
-  const top = (report.repetition as { top?: RepetitionEntry[] }).top;
-  return Array.isArray(top) ? top : [];
-}
 
 const sortOptions = [
   { value: "count" as const, label: "Count" },
@@ -69,23 +59,26 @@ export function StyleView({
   onOpenMetricEvidence,
   onNavigateToScene
 }: StyleViewProps): JSX.Element {
-  const [sortBy, setSortBy] = useState<"count" | "ngram">("count");
+  const [sortBy, setSortBy] = useState<RepetitionSort>("count");
   const [showAllRepetitions, setShowAllRepetitions] = useState(false);
   const entries = useMemo(() => {
-    const base = toRepetitionEntries(report);
-    return [...base].sort((a, b) =>
-      sortBy === "count" ? b.count - a.count : a.ngram.localeCompare(b.ngram)
-    );
+    return sortRepetitionEntries(toRepetitionEntries(report), sortBy);
   }, [report, sortBy]);
-  const visibleEntries = showAllRepetitions ? entries : entries.slice(0, 20);
+  const visibleEntries = useMemo(
+    () => getVisibleRepetitionEntries(entries, showAllRepetitions),
+    [entries, showAllRepetitions]
+  );
+  const { toneIssues, dialogueIssues } = useMemo(
+    () => partitionStyleIssues(styleIssues),
+    [styleIssues]
+  );
 
   if (!loaded) {
     return <StyleSkeleton />;
   }
 
-  const maxCount = entries.length > 0 ? Math.max(...entries.map((e) => e.count)) : 1;
-  const toneIssues = styleIssues.filter((issue) => issue.type === "tone_drift");
-  const dialogueIssues = styleIssues.filter((issue) => issue.type === "dialogue_tic");
+  const maxCount = getMaxRepetitionCount(entries);
+  const repetitionToggleLabel = getRepetitionToggleLabel(entries.length, showAllRepetitions);
 
   return (
     <section className="flex flex-col gap-4">
@@ -135,18 +128,7 @@ export function StyleView({
                   </thead>
                   <tbody>
                     {visibleEntries.map((entry) => {
-                      const evidence: EvidenceItem[] = (entry.examples ?? [])
-                        .filter((ex): ex is NonNullable<typeof ex> => Boolean(ex))
-                        .map((ex) => ({
-                          chunkId: ex.chunkId,
-                          quoteStart: ex.quoteStart,
-                          quoteEnd: ex.quoteEnd,
-                          excerpt: ex.excerpt ?? "",
-                          documentPath: ex.documentPath ?? null,
-                          chunkOrdinal: ex.chunkOrdinal ?? null,
-                          lineStart: ex.lineStart ?? null,
-                          lineEnd: ex.lineEnd ?? null
-                        }));
+                      const evidence: EvidenceItem[] = examplesToEvidenceItems(entry.examples);
                       return (
                         <tr key={entry.ngram}>
                           <td className="font-medium">{entry.ngram}</td>
@@ -175,13 +157,13 @@ export function StyleView({
                     })}
                   </tbody>
                 </table>
-                {entries.length > 20 ? (
+                {repetitionToggleLabel ? (
                   <button
                     type="button"
                     className="mt-3 self-start text-sm text-accent underline transition-colors hover:text-accent-strong cursor-pointer"
                     onClick={() => setShowAllRepetitions((prev) => !prev)}
                   >
-                    {showAllRepetitions ? "Show fewer" : `Showing 20 of ${entries.length} phrases. Show all`}
+                    {repetitionToggleLabel}
                   </button>
                 ) : null}
               </div>
@@ -199,7 +181,7 @@ export function StyleView({
             ) : (
               <div className="flex flex-col gap-2">
                 {toneIssues.map((issue) => {
-                  const sceneEvidence = issue.evidence.find((e) => e.sceneId);
+                  const sceneEvidenceId = findSceneEvidenceId(issue);
                   return (
                     <div key={issue.id} className="flex items-start justify-between gap-3 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
                       <div>
@@ -215,11 +197,11 @@ export function StyleView({
                           <Quote size={12} />
                           Evidence ({issue.evidence.length})
                         </button>
-                        {sceneEvidence?.sceneId && onNavigateToScene ? (
+                        {sceneEvidenceId && onNavigateToScene ? (
                           <button
                             className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
                             type="button"
-                            onClick={() => onNavigateToScene(sceneEvidence.sceneId!)}
+                            onClick={() => onNavigateToScene(sceneEvidenceId)}
                           >
                             <BookOpen size={12} />
                             View Scene
@@ -244,7 +226,7 @@ export function StyleView({
             ) : (
               <div className="flex flex-col gap-2">
                 {dialogueIssues.map((issue) => {
-                  const sceneEvidence = issue.evidence.find((e) => e.sceneId);
+                  const sceneEvidenceId = findSceneEvidenceId(issue);
                   return (
                     <div key={issue.id} className="flex items-start justify-between gap-3 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
                       <div>
@@ -260,11 +242,11 @@ export function StyleView({
                           <Quote size={12} />
                           Evidence ({issue.evidence.length})
                         </button>
-                        {sceneEvidence?.sceneId && onNavigateToScene ? (
+                        {sceneEvidenceId && onNavigateToScene ? (
                           <button
                             className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
                             type="button"
-                            onClick={() => onNavigateToScene(sceneEvidence.sceneId!)}
+                            onClick={() => onNavigateToScene(sceneEvidenceId)}
                           >
                             <BookOpen size={12} />
                             View Scene

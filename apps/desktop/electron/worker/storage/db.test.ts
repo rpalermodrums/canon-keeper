@@ -209,4 +209,68 @@ describe("openDatabase", () => {
       /not a database|malformed|disk image/i
     );
   });
+
+  it("remaps native-module mismatch errors to a recovery-focused message", async () => {
+    const rootPath = createTempRoot(tempRoots);
+    vi.resetModules();
+    const MockDatabase = function MockDatabaseConstructor(): never {
+      throw new Error("NODE_MODULE_VERSION mismatch while loading better_sqlite3.node");
+    };
+    vi.doMock("better-sqlite3", () => ({ default: MockDatabase }));
+
+    try {
+      const dbModule = await import("./db");
+      const message = (() => {
+        try {
+          dbModule.openDatabase({ rootPath, migrationsDir: path.resolve("migrations") });
+          return "";
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      })();
+
+      expect(message).toMatch(/Failed to load better-sqlite3 native module/);
+      expect(message).toMatch(/bun install|npm rebuild better-sqlite3/i);
+    } finally {
+      vi.unmock("better-sqlite3");
+      vi.resetModules();
+    }
+  });
+
+  it("rethrows non-native constructor errors without remapping", async () => {
+    const rootPath = createTempRoot(tempRoots);
+    const constructorError = new Error("unable to open database file");
+    vi.resetModules();
+    const MockDatabase = function MockDatabaseConstructor(): never {
+      throw constructorError;
+    };
+    vi.doMock("better-sqlite3", () => ({ default: MockDatabase }));
+
+    try {
+      const dbModule = await import("./db");
+      const thrown = (() => {
+        try {
+          dbModule.openDatabase({ rootPath, migrationsDir: path.resolve("migrations") });
+          return null;
+        } catch (error) {
+          return error;
+        }
+      })();
+
+      expect(thrown).toBe(constructorError);
+    } finally {
+      vi.unmock("better-sqlite3");
+      vi.resetModules();
+    }
+  });
+
+  it("throws when migrations directory has no SQL files", () => {
+    const rootPath = createTempRoot(tempRoots);
+    const emptyMigrationsDir = path.join(createTempRoot(tempRoots), "empty-migrations");
+    fs.mkdirSync(emptyMigrationsDir, { recursive: true });
+
+    expect(() => openDatabase({ rootPath, migrationsDir: emptyMigrationsDir })).toThrow(
+      `No SQL migrations found in ${emptyMigrationsDir}`
+    );
+  });
 });

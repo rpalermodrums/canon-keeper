@@ -6,12 +6,13 @@ import { FilterBar, FilterGroup } from "../components/FilterBar";
 import { Skeleton } from "../components/Skeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { TogglePill } from "../components/TogglePill";
-
-type EntityFilters = {
-  type: string;
-  status: "all" | "confirmed" | "inferred";
-  query: string;
-};
+import {
+  filterEntities,
+  groupClaimsByField,
+  listEntityTypes,
+  toClaimRenderData,
+  type EntityFilters
+} from "./bibleViewUtils";
 
 type BibleViewProps = {
   busy: boolean;
@@ -49,35 +50,6 @@ const claimStatusOptions = [
   { value: "inferred" as const, label: "Detected" }
 ];
 
-const formatClaimValue = (valueJson: string): string => {
-  try {
-    const parsed = JSON.parse(valueJson);
-    if (typeof parsed === "string") return parsed;
-    if (typeof parsed === "number" || typeof parsed === "boolean") return String(parsed);
-    if (Array.isArray(parsed)) return parsed.join(", ");
-    if (typeof parsed === "object" && parsed !== null) {
-      return Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join(", ");
-    }
-    return valueJson;
-  } catch {
-    return valueJson;
-  }
-};
-
-function groupByField(detail: EntityDetail | null): Array<{
-  field: string;
-  claims: EntityDetail["claims"];
-}> {
-  if (!detail) return [];
-  const map = new Map<string, EntityDetail["claims"]>();
-  for (const claim of detail.claims) {
-    const group = map.get(claim.claim.field) ?? [];
-    group.push(claim);
-    map.set(claim.claim.field, group);
-  }
-  return Array.from(map.entries()).map(([field, claims]) => ({ field, claims }));
-}
-
 function BibleSkeleton(): JSX.Element {
   return (
     <section className="flex flex-col gap-4">
@@ -113,18 +85,10 @@ export function BibleView({
   onOpenEvidence,
   onRequestConfirmClaim
 }: BibleViewProps): JSX.Element {
-  const types = Array.from(new Set(entities.map((e) => e.type))).sort();
-  const filtered = entities.filter((entity) => {
-    const typeMatch = !filters.type || entity.type === filters.type;
-    const q = filters.query.trim().toLowerCase();
-    const queryMatch = q.length === 0 || entity.display_name.toLowerCase().includes(q);
-    if (!typeMatch || !queryMatch) return false;
-    if (filters.status === "all" || !entityDetail || entity.id !== entityDetail.entity.id) return true;
-    const hasConfirmed = entityDetail.claims.some((c) => c.claim.status === "confirmed");
-    return filters.status === "confirmed" ? hasConfirmed : !hasConfirmed;
-  });
+  const types = listEntityTypes(entities);
+  const filtered = filterEntities(entities, filters, entityDetail);
 
-  const groupedClaims = useMemo(() => groupByField(entityDetail), [entityDetail]);
+  const groupedClaims = useMemo(() => groupClaimsByField(entityDetail), [entityDetail]);
 
   if (!loaded) {
     return <BibleSkeleton />;
@@ -225,49 +189,55 @@ export function BibleView({
                       {group.field}
                     </summary>
                     <div className="flex flex-col gap-2 p-3">
-                      {group.claims.map((claim) => (
-                        <div key={claim.claim.id} className="rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/30">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm">{formatClaimValue(claim.claim.value_json)}</span>
-                            <StatusBadge
-                              label={claim.claim.status}
-                              status={claim.claim.status}
-                              icon={claim.claim.status === "confirmed" ? CheckCircle : undefined}
-                            />
-                          </div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <button
-                              className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
-                              type="button"
-                              onClick={() =>
-                                onOpenEvidence(`${group.field}`, claim, { sourceId: claim.claim.id })
-                              }
-                              disabled={claim.evidence.length === 0}
-                            >
-                              <Quote size={12} />
-                              Evidence ({claim.evidence.length})
-                            </button>
-                            {claim.claim.status !== "confirmed" ? (
+                      {group.claims.map((claim) => {
+                        const renderData = toClaimRenderData(claim);
+                        return (
+                          <div
+                            key={claim.claim.id}
+                            className="rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/30"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm">{renderData.valueLabel}</span>
+                              <StatusBadge
+                                label={renderData.status}
+                                status={renderData.status}
+                                icon={renderData.status === "confirmed" ? CheckCircle : undefined}
+                              />
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
                               <button
-                                className="inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-transparent px-2 py-1 text-xs text-accent transition-colors hover:bg-accent-soft cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
                                 type="button"
                                 onClick={() =>
-                                  onRequestConfirmClaim({
-                                    field: claim.claim.field,
-                                    valueJson: claim.claim.value_json,
-                                    sourceClaimId: claim.claim.id,
-                                    evidenceCount: claim.evidence.length
-                                  })
+                                  onOpenEvidence(`${group.field}`, claim, { sourceId: claim.claim.id })
                                 }
-                                disabled={claim.evidence.length === 0}
+                                disabled={renderData.evidenceCount === 0}
                               >
-                                <CheckCircle size={12} />
-                                Confirm
+                                <Quote size={12} />
+                                Evidence ({renderData.evidenceCount})
                               </button>
-                            ) : null}
+                              {renderData.status !== "confirmed" ? (
+                                <button
+                                  className="inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-transparent px-2 py-1 text-xs text-accent transition-colors hover:bg-accent-soft cursor-pointer disabled:opacity-50"
+                                  type="button"
+                                  onClick={() =>
+                                    onRequestConfirmClaim({
+                                      field: renderData.field,
+                                      valueJson: claim.claim.value_json,
+                                      sourceClaimId: renderData.claimId,
+                                      evidenceCount: renderData.evidenceCount
+                                    })
+                                  }
+                                  disabled={!renderData.canConfirm}
+                                >
+                                  <CheckCircle size={12} />
+                                  Confirm
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </details>
                 ))}
