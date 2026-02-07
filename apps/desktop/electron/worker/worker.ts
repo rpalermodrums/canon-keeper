@@ -507,13 +507,23 @@ async function handleJob(job: WorkerJob): Promise<WorkerJobResult> {
   }
 }
 
-async function handleCreateOrOpen(params: { rootPath: string; name?: string }): Promise<unknown> {
-  const { name } = params;
+async function handleCreateOrOpen(params: {
+  rootPath: string;
+  name?: string;
+  createIfMissing?: boolean;
+}): Promise<unknown> {
+  const { name, createIfMissing } = params;
   const rootPath = path.resolve(params.rootPath);
+  if (createIfMissing === false) {
+    const dbPath = path.join(rootPath, ".canonkeeper", "canonkeeper.db");
+    if (!fs.existsSync(dbPath)) {
+      return null;
+    }
+  }
   const active = await ensureSession(rootPath);
-  ensureProjectConfig(rootPath);
   const existing = getProjectByRootPath(active.handle.db, rootPath);
   if (existing) {
+    ensureProjectConfig(rootPath);
     touchProject(active.handle.db, existing.id);
     currentProjectId = existing.id;
     currentProjectRoot = rootPath;
@@ -523,6 +533,11 @@ async function handleCreateOrOpen(params: { rootPath: string; name?: string }): 
     return existing;
   }
 
+  if (createIfMissing === false) {
+    return null;
+  }
+
+  ensureProjectConfig(rootPath);
   const created = createProject(active.handle.db, rootPath, name);
   currentProjectId = created.id;
   currentProjectRoot = rootPath;
@@ -636,7 +651,14 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
       if (!params || typeof params !== "object") {
         throw new Error("Missing params for project.createOrOpen");
       }
-      return await handleCreateOrOpen(params as { rootPath: string; name?: string });
+      return await handleCreateOrOpen(
+        params as { rootPath: string; name?: string; createIfMissing?: boolean }
+      );
+    case "project.getCurrent":
+      if (!session || !currentProjectId) {
+        return null;
+      }
+      return getProjectByRootPath(session.handle.db, currentProjectRoot!);
     case "project.getStatus":
       return getStatus();
     case "project.subscribeStatus":
@@ -924,6 +946,7 @@ process.on("message", async (message: RpcRequest) => {
   const shouldTrackRpcAsBusy =
     method !== "project.getStatus" &&
     method !== "project.subscribeStatus" &&
+    method !== "project.getCurrent" &&
     method !== "project.getDiagnostics" &&
     method !== "project.stats" &&
     method !== "project.evidenceCoverage" &&

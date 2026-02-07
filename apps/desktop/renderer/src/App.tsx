@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { Play, RefreshCw } from "lucide-react";
+import { Loader2, Play, RefreshCw } from "lucide-react";
 import { AsyncToast } from "./components/AsyncToast";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConfirmModal } from "./components/ConfirmModal";
@@ -127,7 +127,14 @@ export function App(): JSX.Element {
           onOpenCommandPalette={() => app.setCommandPaletteOpen(true)}
         />
 
-        <main className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"}`}>
+        {app.bootState === "booting" ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-text-secondary">
+            <Loader2 size={24} className="animate-spin text-accent" />
+            <p className="text-sm">Restoring your last session...</p>
+          </div>
+        ) : null}
+
+        <main className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"} ${app.bootState === "booting" ? "hidden" : ""}`}>
           {app.error ? <InlineError error={app.error} onDismiss={app.clearError} onAction={app.onRunDiagnostics} /> : null}
 
           <div className="animate-fade-in">
@@ -157,6 +164,8 @@ export function App(): JSX.Element {
                 healthCheck={app.healthCheck}
                 hasProject={hasProject}
                 hasDocuments={hasDocuments}
+                bootError={app.bootError}
+                onClearBootError={app.clearBootError}
                 onRootPathChange={app.setRootPath}
                 onDocPathChange={app.setDocPath}
                 onPickProjectRoot={app.onPickProjectRoot}
@@ -267,7 +276,10 @@ export function App(): JSX.Element {
               <SettingsView
                 status={app.status}
                 healthCheck={app.healthCheck}
+                hasProject={hasProject}
                 onRunDiagnostics={app.onRunDiagnostics}
+                onForgetProject={app.onForgetLastProject}
+                onResetProjectState={app.onResetProjectState}
                 theme={theme}
                 onThemeChange={setTheme}
                 sidebarCollapsed={app.sidebarCollapsed}

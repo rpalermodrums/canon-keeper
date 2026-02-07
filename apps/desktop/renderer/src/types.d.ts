@@ -72,13 +72,24 @@ declare global {
         pickExportDir: () => Promise<string | null>;
       };
       project: {
-        createOrOpen: (payload: { rootPath: string; name?: string }) => Promise<{
+        createOrOpen: (payload: {
+          rootPath: string;
+          name?: string;
+          createIfMissing?: boolean;
+        }) => Promise<{
           id: string;
           root_path: string;
           name: string;
           created_at: number;
           updated_at: number;
-        }>;
+        } | null>;
+        getCurrent: () => Promise<{
+          id: string;
+          root_path: string;
+          name: string;
+          created_at: number;
+          updated_at: number;
+        } | null>;
         getStatus: () => Promise<WorkerStatus>;
         subscribeStatus: () => Promise<WorkerStatus>;
         getDiagnostics: () => Promise<ProjectDiagnostics>;

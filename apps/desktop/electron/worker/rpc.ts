@@ -12,6 +12,7 @@ export type RpcResponse = {
 
 export type WorkerMethods =
   | "project.createOrOpen"
+  | "project.getCurrent"
   | "project.getStatus"
   | "project.subscribeStatus"
   | "project.getDiagnostics"

@@ -24,6 +24,7 @@ import {
   querySearch,
   resolveIssue,
   runExport,
+  getCurrentProject,
   subscribeProjectStatus,
   undoDismissIssue,
   undoResolveIssue,
@@ -58,6 +59,17 @@ import {
   Search,
   Settings
 } from "lucide-react";
+import {
+  type ProjectUIState,
+  type SessionEnvelope,
+  DEFAULT_PROJECT_STATE,
+  clearProjectState,
+  getProjectState,
+  loadSession,
+  saveSession,
+  setGlobalState,
+  setProjectState
+} from "./persistence";
 
 export type AppSection =
   | "dashboard"
@@ -115,26 +127,6 @@ type ContinueContext = {
   sceneId: string | null;
 };
 
-function readStorage<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      return fallback;
-    }
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeStorage<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore storage errors
-  }
-}
-
 function nextSection(current: AppSection, delta: number): AppSection {
   const index = APP_SECTIONS.findIndex((section) => section.id === current);
   if (index < 0) {
@@ -172,9 +164,7 @@ function computeLayoutMode(width: number): LayoutMode {
 }
 
 export function useCanonkeeperApp() {
-  const [activeSection, setActiveSection] = useState<AppSection>(() =>
-    readStorage<AppSection>("canonkeeper.activeSection", "dashboard")
-  );
+  const [activeSection, setActiveSection] = useState<AppSection>("dashboard");
   const [rootPath, setRootPath] = useState("");
   const [docPath, setDocPath] = useState("");
   const [exportDir, setExportDir] = useState("");
@@ -221,41 +211,31 @@ export function useCanonkeeperApp() {
   const [askResult, setAskResult] = useState<AskResponse | null>(null);
 
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
-  const [selectedSceneId, setSelectedSceneId] = useState<string>(() =>
-    readStorage<string>("canonkeeper.selectedSceneId", "")
-  );
+  const [selectedSceneId, setSelectedSceneId] = useState("");
   const [sceneDetail, setSceneDetail] = useState<SceneDetail | null>(null);
   const [sceneQuery, setSceneQuery] = useState("");
 
   const [issues, setIssues] = useState<IssueSummary[]>([]);
-  const [selectedIssueId, setSelectedIssueId] = useState<string>(() =>
-    readStorage<string>("canonkeeper.selectedIssueId", "")
-  );
-  const [issueFilters, setIssueFilters] = useState<IssueFilters>(() =>
-    readStorage<IssueFilters>("canonkeeper.issueFilters", {
-      status: "open",
-      severity: "all",
-      type: "",
-      query: "",
-      sort: "recency"
-    })
-  );
+  const [selectedIssueId, setSelectedIssueId] = useState("");
+  const [issueFilters, setIssueFilters] = useState<IssueFilters>({
+    status: "open",
+    severity: "all",
+    type: "",
+    query: "",
+    sort: "recency"
+  });
 
   const [styleReport, setStyleReport] = useState<StyleReport | null>(null);
   const [styleIssues, setStyleIssues] = useState<IssueSummary[]>([]);
 
   const [entities, setEntities] = useState<EntitySummary[]>([]);
-  const [selectedEntityId, setSelectedEntityId] = useState<string>(() =>
-    readStorage<string>("canonkeeper.selectedEntityId", "")
-  );
+  const [selectedEntityId, setSelectedEntityId] = useState("");
   const [entityDetail, setEntityDetail] = useState<EntityDetail | null>(null);
-  const [entityFilters, setEntityFilters] = useState<EntityFilters>(() =>
-    readStorage<EntityFilters>("canonkeeper.entityFilters", {
-      type: "",
-      status: "all",
-      query: ""
-    })
-  );
+  const [entityFilters, setEntityFilters] = useState<EntityFilters>({
+    type: "",
+    status: "all",
+    query: ""
+  });
 
   const [activeEvidenceContext, setActiveEvidenceContext] = useState<ActiveEvidenceContext>(null);
   const [evidencePinned, setEvidencePinned] = useState(false);
@@ -281,9 +261,7 @@ export function useCanonkeeperApp() {
     typeof window === "undefined" ? "desktop" : computeLayoutMode(window.innerWidth)
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsedRaw] = useState(() =>
-    readStorage<boolean>("canonkeeper.sidebarCollapsed", false)
-  );
+  const [sidebarCollapsed, setSidebarCollapsedRaw] = useState(false);
 
   const [confirmClaimDraft, setConfirmClaimDraft] = useState<{
     field: string;
@@ -300,15 +278,19 @@ export function useCanonkeeperApp() {
 
   const [lastExportResult, setLastExportResult] = useState<ExportResult | null>(null);
 
-  const [continueContext, setContinueContext] = useState<ContinueContext>(() =>
-    readStorage<ContinueContext>("canonkeeper.continueContext", {
-      issueId: null,
-      entityId: null,
-      sceneId: null
-    })
-  );
+  const [continueContext, setContinueContext] = useState<ContinueContext>({
+    issueId: null,
+    entityId: null,
+    sceneId: null
+  });
 
   const lastWorkerState = useRef<"idle" | "busy" | "unknown">("unknown");
+  const hydratingRef = useRef(false);
+  const bootAttemptedRef = useRef(false);
+  const sessionRef = useRef<SessionEnvelope | null>(null);
+
+  const [bootState, setBootState] = useState<"booting" | "ready" | "restore-failed">("booting");
+  const [bootError, setBootError] = useState<string | null>(null);
 
   const busy = pendingActions.length > 0;
 
@@ -408,7 +390,7 @@ export function useCanonkeeperApp() {
     }
   }, [selectedEntityId]);
 
-  const refreshAll = useCallback(async () => {
+  const refreshProjectData = useCallback(async () => {
     if (!project) {
       return;
     }
@@ -423,6 +405,39 @@ export function useCanonkeeperApp() {
     ]);
   }, [project, refreshEntities, refreshEvidenceCoverage, refreshIssues, refreshProcessingAndHistory, refreshProjectStats, refreshScenes, refreshStyle]);
 
+  const hydrateProjectData = useCallback(async (projectSummary: ProjectSummary, projectState?: ProjectUIState) => {
+    if (hydratingRef.current) return;
+    hydratingRef.current = true;
+    try {
+      setProject(projectSummary);
+      setRootPath(projectSummary.root_path);
+      if (projectState) {
+        setIssueFilters(projectState.issueFilters as IssueFilters);
+        setEntityFilters(projectState.entityFilters as EntityFilters);
+        setSelectedSceneId(projectState.selectedSceneId);
+        setSelectedIssueId(projectState.selectedIssueId);
+        setSelectedEntityId(projectState.selectedEntityId);
+        setContinueContext(projectState.continueContext);
+      }
+      await Promise.all([
+        // Call guarded APIs directly to avoid stale project closure
+        Promise.all([getProcessingState(), getProjectHistory()]).then(([nextState, nextHistory]) => {
+          setProcessingState(nextState);
+          setHistory(nextHistory);
+        }),
+        getProjectStats().then((stats) => setProjectStats(stats)).catch(() => {}),
+        getEvidenceCoverage().then((coverage) => setEvidenceCoverage(coverage)).catch(() => {}),
+        // Unguarded refreshes can be called directly
+        refreshScenes(),
+        refreshIssues(),
+        refreshStyle(),
+        refreshEntities()
+      ]);
+    } finally {
+      hydratingRef.current = false;
+    }
+  }, [refreshEntities, refreshIssues, refreshScenes, refreshStyle]);
+
   const setAppError = useCallback((code: string, err: unknown, actionLabel?: string, action?: string) => {
     setError(toUserFacingError(code, err, actionLabel, action));
   }, []);
@@ -431,8 +446,115 @@ export function useCanonkeeperApp() {
     setError(null);
   }, []);
 
+  const clearBootError = useCallback(() => {
+    setBootError(null);
+    setBootState("ready");
+  }, []);
+
+  const applyProjectUIState = useCallback((state: ProjectUIState) => {
+    setIssueFilters(state.issueFilters as IssueFilters);
+    setEntityFilters(state.entityFilters as EntityFilters);
+    setSelectedSceneId(state.selectedSceneId);
+    setSelectedIssueId(state.selectedIssueId);
+    setSelectedEntityId(state.selectedEntityId);
+    setContinueContext(state.continueContext);
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Boot effect — restores active project and per-project UI state on launch
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    writeStorage("canonkeeper.activeSection", activeSection);
+    if (bootAttemptedRef.current) return;
+    bootAttemptedRef.current = true;
+
+    const boot = async () => {
+      // 1. Load persisted session envelope
+      const envelope = loadSession();
+      sessionRef.current = envelope;
+
+      // 2. Apply global UI state
+      if (envelope.global.activeSection) {
+        const section = envelope.global.activeSection as AppSection;
+        if (APP_SECTIONS.some((s) => s.id === section)) {
+          setActiveSection(section);
+        }
+      }
+      if (envelope.global.sidebarCollapsed) {
+        setSidebarCollapsedRaw(true);
+      }
+
+      // 3. Check if worker already has an active project (refresh / HMR case)
+      try {
+        const current = await getCurrentProject();
+
+        if (current) {
+          const projectState = getProjectState(envelope, current.id);
+          const withProjectState = setProjectState(envelope, current.id, projectState);
+          await hydrateProjectData(current, projectState);
+          sessionRef.current = setGlobalState(withProjectState, {
+            lastProjectRoot: current.root_path,
+            lastProjectId: current.id,
+            lastProjectName: current.name
+          });
+          saveSession(sessionRef.current);
+          setBootState("ready");
+          return;
+        }
+      } catch {
+        // Worker not ready yet — fall through to restore attempt
+      }
+
+      // 4. Try to restore last project (relaunch case)
+      if (envelope.global.lastProjectRoot) {
+        try {
+          const restored = await createOrOpenProject({
+            rootPath: envelope.global.lastProjectRoot,
+            createIfMissing: false
+          });
+          if (!restored) {
+            throw new Error("Project not found");
+          }
+          const projectState = getProjectState(envelope, restored.id);
+          const withProjectState = setProjectState(envelope, restored.id, projectState);
+          await hydrateProjectData(restored, projectState);
+          sessionRef.current = setGlobalState(withProjectState, {
+            lastProjectRoot: restored.root_path,
+            lastProjectId: restored.id,
+            lastProjectName: restored.name
+          });
+          saveSession(sessionRef.current);
+          setBootState("ready");
+          return;
+        } catch {
+          // Stale/moved/permission error — clear and show recovery UI
+          const cleared = setGlobalState(envelope, {
+            lastProjectRoot: null,
+            lastProjectId: null,
+            lastProjectName: null
+          });
+          sessionRef.current = cleared;
+          saveSession(cleared);
+          setBootError(
+            "Could not restore your last project. The folder may have moved or been deleted."
+          );
+          setActiveSection("setup");
+          setBootState("restore-failed");
+          return;
+        }
+      }
+
+      // 5. No active project, no persisted root — fresh start
+      setBootState("ready");
+    };
+
+    void boot();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Section change side-effects
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
     setMobileNavOpen(false);
     if (!evidencePinned) {
       setEvidenceDrawer((current) => ({ ...current, open: false }));
@@ -440,13 +562,13 @@ export function useCanonkeeperApp() {
     }
   }, [activeSection, evidencePinned]);
 
-  // Auto-route to Setup when no project is open on initial load
+  // Auto-route to Setup when no project is open after boot completes
   useEffect(() => {
-    if (!project && activeSection === "dashboard") {
+    if (bootState === "ready" && !project && activeSection === "dashboard") {
       setActiveSection("setup");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bootState]);
 
   useEffect(() => {
     const onResize = () => {
@@ -458,29 +580,48 @@ export function useCanonkeeperApp() {
     };
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Envelope-aware persistence — scoped per project
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    writeStorage("canonkeeper.issueFilters", issueFilters);
-  }, [issueFilters]);
+    if (bootState === "booting" || !sessionRef.current) return;
+    const next = setGlobalState(sessionRef.current, { activeSection });
+    sessionRef.current = next;
+    saveSession(next);
+  }, [activeSection, bootState]);
 
   useEffect(() => {
-    writeStorage("canonkeeper.entityFilters", entityFilters);
-  }, [entityFilters]);
+    if (bootState === "booting" || !sessionRef.current) return;
+    const next = setGlobalState(sessionRef.current, { sidebarCollapsed });
+    sessionRef.current = next;
+    saveSession(next);
+  }, [sidebarCollapsed, bootState]);
 
   useEffect(() => {
-    writeStorage("canonkeeper.selectedSceneId", selectedSceneId);
-  }, [selectedSceneId]);
+    if (bootState === "booting" || hydratingRef.current || !sessionRef.current || !project) return;
+    const next = setProjectState(sessionRef.current, project.id, {
+      issueFilters,
+      entityFilters,
+      selectedSceneId,
+      selectedIssueId,
+      selectedEntityId,
+      continueContext
+    });
+    sessionRef.current = next;
+    saveSession(next);
+  }, [bootState, project, issueFilters, entityFilters, selectedSceneId, selectedIssueId, selectedEntityId, continueContext]);
 
+  // Persist project pointer when project changes
   useEffect(() => {
-    writeStorage("canonkeeper.selectedIssueId", selectedIssueId);
-  }, [selectedIssueId]);
-
-  useEffect(() => {
-    writeStorage("canonkeeper.selectedEntityId", selectedEntityId);
-  }, [selectedEntityId]);
-
-  useEffect(() => {
-    writeStorage("canonkeeper.continueContext", continueContext);
-  }, [continueContext]);
+    if (bootState === "booting" || !sessionRef.current || !project) return;
+    const next = setGlobalState(sessionRef.current, {
+      lastProjectRoot: project.root_path,
+      lastProjectId: project.id,
+      lastProjectName: project.name
+    });
+    sessionRef.current = next;
+    saveSession(next);
+  }, [bootState, project]);
 
   useEffect(() => {
     let active = true;
@@ -510,7 +651,7 @@ export function useCanonkeeperApp() {
           const becameIdle = lastWorkerState.current === "busy" && next.state === "idle";
           lastWorkerState.current = next.state;
           if (project && becameIdle) {
-            void refreshAll();
+            void refreshProjectData();
           }
         }
       } catch {
@@ -527,7 +668,7 @@ export function useCanonkeeperApp() {
       active = false;
       controller.abort();
     };
-  }, [project, refreshAll]);
+  }, [project, refreshProjectData]);
 
   const runDiagnostics = useCallback(async () => {
     const action = "diagnostics";
@@ -556,15 +697,26 @@ export function useCanonkeeperApp() {
     clearError();
     try {
       const created = await createOrOpenProject({ rootPath: rootPath.trim() });
-      setProject(created);
-      await refreshAll();
+      if (!created) {
+        throw new Error("Project could not be opened");
+      }
+      const envelope = sessionRef.current ?? loadSession();
+      const projectState = getProjectState(envelope, created.id);
+      const withProjectState = setProjectState(envelope, created.id, projectState);
+      sessionRef.current = setGlobalState(withProjectState, {
+        lastProjectRoot: created.root_path,
+        lastProjectId: created.id,
+        lastProjectName: created.name
+      });
+      saveSession(sessionRef.current);
+      await hydrateProjectData(created, projectState);
       pushToast({ message: `Project ready: ${created.name}`, tone: "success" });
     } catch (err) {
       setAppError("PROJECT_OPEN_FAILED", err, "Run Diagnostics", "runDiagnostics");
     } finally {
       endAction(action);
     }
-  }, [beginAction, clearError, endAction, pushToast, refreshAll, rootPath, setAppError]);
+  }, [beginAction, clearError, endAction, hydrateProjectData, pushToast, rootPath, setAppError]);
 
   const onPickProjectRoot = useCallback(async () => {
     try {
@@ -608,14 +760,14 @@ export function useCanonkeeperApp() {
     try {
       const result = await addDocument({ path: docPath.trim() });
       setLastIngest(result);
-      await refreshAll();
+      await refreshProjectData();
       pushToast({ message: "Document ingested.", tone: "success" });
     } catch (err) {
       setAppError("INGEST_FAILED", err);
     } finally {
       endAction(action);
     }
-  }, [beginAction, clearError, docPath, endAction, pushToast, refreshAll, setAppError]);
+  }, [beginAction, clearError, docPath, endAction, pushToast, refreshProjectData, setAppError]);
 
   const onSearch = useCallback(async () => {
     const action = "search";
@@ -1030,7 +1182,31 @@ export function useCanonkeeperApp() {
     ]
   );
 
+  const onForgetLastProject = useCallback(() => {
+    if (!sessionRef.current) return;
+    const next = setGlobalState(sessionRef.current, {
+      lastProjectRoot: null,
+      lastProjectId: null,
+      lastProjectName: null
+    });
+    sessionRef.current = next;
+    saveSession(next);
+    pushToast({ message: "Last project forgotten. Next launch will start fresh.", tone: "success" });
+  }, [pushToast]);
+
+  const onResetProjectState = useCallback(() => {
+    if (!sessionRef.current || !project) return;
+    const next = clearProjectState(sessionRef.current, project.id);
+    sessionRef.current = next;
+    saveSession(next);
+    applyProjectUIState(DEFAULT_PROJECT_STATE);
+    pushToast({ message: "Saved state for this project has been reset.", tone: "success" });
+  }, [applyProjectUIState, project, pushToast]);
+
   return {
+    bootState,
+    bootError,
+    clearBootError,
     activeSection,
     setActiveSection,
     status,
@@ -1091,7 +1267,6 @@ export function useCanonkeeperApp() {
     sidebarCollapsed,
     setSidebarCollapsed: (collapsed: boolean) => {
       setSidebarCollapsedRaw(collapsed);
-      writeStorage("canonkeeper.sidebarCollapsed", collapsed);
     },
     confirmClaimDraft,
     setConfirmClaimDraft,
@@ -1102,6 +1277,7 @@ export function useCanonkeeperApp() {
     onJumpToIssue: () => setActiveSection("issues"),
     onJumpToEntity: () => setActiveSection("bible"),
     onJumpToScene: () => setActiveSection("scenes"),
+    hydrateProjectData,
     onCreateProject,
     onPickProjectRoot,
     onPickDocument,
@@ -1119,6 +1295,8 @@ export function useCanonkeeperApp() {
     onPickExportDir,
     onRunExport,
     onRunDiagnostics: runDiagnostics,
+    onForgetLastProject,
+    onResetProjectState,
     refreshScenes,
     refreshIssues,
     refreshStyle,

@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { CheckCircle, FolderOpen, FolderSearch, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle, FolderOpen, FolderSearch, RefreshCw, X } from "lucide-react";
 import type { ProjectDiagnostics } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
@@ -12,6 +12,8 @@ type SetupViewProps = {
   healthCheck: ProjectDiagnostics | null;
   hasProject: boolean;
   hasDocuments: boolean;
+  bootError: string | null;
+  onClearBootError: () => void;
   onRootPathChange: (value: string) => void;
   onDocPathChange: (value: string) => void;
   onPickProjectRoot: () => void;
@@ -49,6 +51,8 @@ export function SetupView({
   healthCheck,
   hasProject,
   hasDocuments,
+  bootError,
+  onClearBootError,
   onRootPathChange,
   onDocPathChange,
   onPickProjectRoot,
@@ -70,6 +74,39 @@ export function SetupView({
           Set up your project in a few quick steps.
         </p>
       </header>
+
+      {bootError ? (
+        <div className="flex items-start gap-3 rounded-md border border-warn/30 bg-warn-soft p-4">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warn" />
+          <div className="flex flex-1 flex-col gap-2">
+            <p className="m-0 text-sm font-medium text-text-primary">{bootError}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-text-inverse transition-colors hover:bg-accent-strong cursor-pointer"
+                onClick={onPickProjectRoot}
+              >
+                <FolderSearch size={14} />
+                Choose Project Folder
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface-2 px-3 py-1.5 text-sm transition-colors hover:bg-white cursor-pointer dark:bg-surface-1"
+                onClick={onClearBootError}
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-text-muted transition-colors hover:text-text-primary cursor-pointer"
+            onClick={onClearBootError}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      ) : null}
 
       <div className="rounded-md border border-border bg-surface-2/70 p-3 dark:bg-surface-1/50">
         <div className="flex flex-wrap items-center justify-center gap-2 py-1">

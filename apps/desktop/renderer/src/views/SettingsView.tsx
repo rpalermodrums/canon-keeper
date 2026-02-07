@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
-import { CheckCircle, ListTodo, RefreshCw, Settings, X } from "lucide-react";
+import { CheckCircle, ListTodo, RefreshCw, RotateCcw, Settings, Trash2, X } from "lucide-react";
 import {
   type ProjectDiagnostics,
   type QueuedJob,
@@ -13,7 +13,10 @@ import { ThemeToggle, type Theme } from "../components/ThemeToggle";
 type SettingsViewProps = {
   status: WorkerStatus | null;
   healthCheck: ProjectDiagnostics | null;
+  hasProject: boolean;
   onRunDiagnostics: () => void;
+  onForgetProject: () => void;
+  onResetProjectState: () => void;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
   sidebarCollapsed: boolean;
@@ -50,7 +53,10 @@ function formatJobTime(ts: number): string {
 export function SettingsView({
   status,
   healthCheck,
+  hasProject,
   onRunDiagnostics,
+  onForgetProject,
+  onResetProjectState,
   theme,
   onThemeChange,
   sidebarCollapsed,
@@ -106,6 +112,37 @@ export function SettingsView({
             />
             Collapse sidebar by default
           </label>
+        </div>
+      </article>
+
+      {/* Session & Persistence */}
+      <article className="flex flex-col gap-4 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
+        <div className="flex items-center gap-2">
+          <RotateCcw size={16} className="text-text-muted" />
+          <h3 className="m-0 text-sm font-semibold">Session & Persistence</h3>
+        </div>
+        <p className="m-0 text-sm text-text-muted">
+          Control how CanonKeeper remembers your workspace between sessions.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm transition-colors hover:bg-white cursor-pointer dark:bg-surface-1"
+            onClick={onForgetProject}
+          >
+            <Trash2 size={14} />
+            Forget Last Project
+          </button>
+          {hasProject ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm transition-colors hover:bg-white cursor-pointer dark:bg-surface-1"
+              onClick={onResetProjectState}
+            >
+              <RotateCcw size={14} />
+              Reset This Project&apos;s Saved State
+            </button>
+          ) : null}
         </div>
       </article>
 

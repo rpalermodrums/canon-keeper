@@ -168,6 +168,12 @@ app.whenReady().then(() => {
     }
     return workerClient.request("project.createOrOpen", payload);
   });
+  ipcMain.handle("project:getCurrent", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("project.getCurrent");
+  });
   ipcMain.handle("project:getStatus", async () => {
     if (!workerClient) {
       throw new Error("Worker not initialized");

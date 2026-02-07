@@ -140,6 +140,8 @@ canon-keeper/
 - Buffers requests during restart, flushes on recovery
 - 30s request timeout
 - Re-opens last project after restart
+- **`project.getCurrent`** — Read-only method returning the active `ProjectSummary` or `null`. Side-effect free, excluded from busy-tracking. Used by the renderer boot sequence to detect if the worker already has an open project (e.g., after HMR/page refresh).
+- **`createIfMissing` flag** — `project.createOrOpen` now accepts `createIfMissing?: boolean` (default `true`). When `false`, returns `null` for non-existent project paths instead of creating a new DB. Used by the auto-restore boot path to avoid silently creating empty projects at stale/moved paths.
 
 ### Pipeline Stages
 
@@ -211,6 +213,9 @@ All access through repository pattern in `worker/storage/`:
 - Auto-refresh on worker idle (busy→idle transition)
 - Global keyboard navigation (`[`, `]`, `j`, `k`, `Cmd+K`)
 - Continue context (resume last issue/entity/scene)
+- **`state/persistence.ts`** — Versioned session envelope (`canonkeeper.session.v1`). Manages per-project UI state (filters, selections, continue context) scoped by project ID, plus global state (last project, active section, sidebar). Provides `loadSession`/`saveSession` with automatic migration from legacy flat localStorage keys. All functions accept optional `StorageBackend` for testability.
+- **`state/bootDecision.ts`** — Pure helper that determines boot action (`adopt-current` | `restore-last` | `fresh-start`) based on worker state and persisted session. Extracted for testability without jsdom.
+- **Boot rehydration flow** — On mount, `useCanonkeeperApp` runs a guarded boot effect (StrictMode-safe via ref): checks worker for active project via `project.getCurrent`, falls back to persisted `lastProjectRoot` with `createIfMissing: false`, applies per-project UI state, then hydrates domain data. Failure clears stale pointers and shows a recovery banner.
 
 #### Views (9 total)
 
@@ -263,6 +268,17 @@ Worker: dispatch("scenes.list")
   → process.send({ id, result })
 Main: pending.resolve(response)
 Renderer: receives scene list
+```
+
+### Boot / Session Restore Flow
+
+```
+Mount → loadSession() → getCurrentProject()
+  ├─ Worker has project → adopt, apply persisted UI state, hydrateProjectData()
+  ├─ No worker project, has lastProjectRoot → createOrOpen(createIfMissing:false)
+  │   ├─ Success → apply persisted UI state, hydrateProjectData()
+  │   └─ Failure → clear stale pointer, show recovery banner
+  └─ No worker project, no persisted root → fresh start (Setup view)
 ```
 
 ## Conventions

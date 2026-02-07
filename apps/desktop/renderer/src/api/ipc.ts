@@ -239,8 +239,13 @@ export async function pickExportDirPath(): Promise<string | null> {
 export async function createOrOpenProject(payload: {
   rootPath: string;
   name?: string;
-}): Promise<ProjectSummary> {
+  createIfMissing?: boolean;
+}): Promise<ProjectSummary | null> {
   return requireIpc().project.createOrOpen(payload);
+}
+
+export async function getCurrentProject(): Promise<ProjectSummary | null> {
+  return requireIpc().project.getCurrent();
 }
 
 export async function getWorkerStatus(): Promise<WorkerStatus> {

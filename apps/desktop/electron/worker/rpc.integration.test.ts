@@ -357,6 +357,95 @@ describe("worker RPC integration", () => {
   );
 
   it(
+    "project.getCurrent returns null before open and active summary after open",
+    async () => {
+      const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-rpc-getcurrent-"));
+      tempRoots.push(rootPath);
+
+      const worker = new RpcWorkerHarness();
+      try {
+        // Before any project is opened, getCurrent should return null
+        const before = await worker.request<ProjectSummary | null>("project.getCurrent");
+        expect(before).toBeNull();
+
+        // Open a project
+        const project = await worker.request<ProjectSummary>("project.createOrOpen", {
+          rootPath,
+          name: "GetCurrent Test"
+        });
+        expect(project.root_path).toBe(path.resolve(rootPath));
+
+        // After opening, getCurrent should return the active project
+        const after = await worker.request<ProjectSummary | null>("project.getCurrent");
+        expect(after).not.toBeNull();
+        expect(after!.id).toBe(project.id);
+        expect(after!.root_path).toBe(project.root_path);
+      } finally {
+        await worker.close();
+      }
+    },
+    30_000
+  );
+
+  it(
+    "project.createOrOpen with createIfMissing: false returns null for non-existent project",
+    async () => {
+      const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-rpc-nomissing-"));
+      tempRoots.push(rootPath);
+
+      const worker = new RpcWorkerHarness();
+      try {
+        // Trying to open a path that has no existing project with createIfMissing: false
+        const result = await worker.request<ProjectSummary | null>("project.createOrOpen", {
+          rootPath,
+          createIfMissing: false
+        });
+        expect(result).toBeNull();
+        expect(fs.existsSync(path.join(rootPath, ".canonkeeper", "canonkeeper.db"))).toBe(false);
+        expect(fs.existsSync(path.join(rootPath, "canonkeeper.json"))).toBe(false);
+
+        // Verify getCurrent is still null (no project was created)
+        const current = await worker.request<ProjectSummary | null>("project.getCurrent");
+        expect(current).toBeNull();
+      } finally {
+        await worker.close();
+      }
+    },
+    30_000
+  );
+
+  it(
+    "project.createOrOpen with default createIfMissing creates project for new path",
+    async () => {
+      const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-rpc-createmissing-"));
+      tempRoots.push(rootPath);
+
+      const worker = new RpcWorkerHarness();
+      try {
+        // Default createIfMissing (true) should create a project
+        const project = await worker.request<ProjectSummary>("project.createOrOpen", {
+          rootPath,
+          name: "Auto Created"
+        });
+        expect(project).not.toBeNull();
+        expect(project.id).toBeTruthy();
+        expect(project.root_path).toBe(path.resolve(rootPath));
+
+        // Opening same path again returns existing project
+        const reopened = await worker.request<ProjectSummary>("project.createOrOpen", {
+          rootPath,
+          createIfMissing: false
+        });
+        expect(reopened).not.toBeNull();
+        expect(reopened!.id).toBe(project.id);
+      } finally {
+        await worker.close();
+      }
+    },
+    30_000
+  );
+
+  it(
     "gracefully falls back when cloud provider is enabled without credentials",
     async () => {
     const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-rpc-cloud-"));

@@ -9,8 +9,9 @@ contextBridge.exposeInMainWorld("canonkeeper", {
     pickExportDir: async () => ipcRenderer.invoke("dialog:pickExportDir")
   },
   project: {
-    createOrOpen: async (payload: { rootPath: string; name?: string }) =>
+    createOrOpen: async (payload: { rootPath: string; name?: string; createIfMissing?: boolean }) =>
       ipcRenderer.invoke("project:createOrOpen", payload),
+    getCurrent: async () => ipcRenderer.invoke("project:getCurrent"),
     getStatus: async () => ipcRenderer.invoke("project:getStatus"),
     subscribeStatus: async () => ipcRenderer.invoke("project:subscribeStatus"),
     getDiagnostics: async () => ipcRenderer.invoke("project:getDiagnostics"),
