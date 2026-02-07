@@ -106,7 +106,7 @@ class RpcWorkerHarness {
 
     this.child = fork(workerPath, [], {
       stdio: ["ignore", "pipe", "pipe", "ipc"],
-      execPath: tsxPath
+      execArgv: ["--import=tsx"]
     });
 
     this.child.on("message", (message: unknown) => {
@@ -361,6 +361,10 @@ describe("worker RPC integration", () => {
     async () => {
     const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-rpc-cloud-"));
     tempRoots.push(rootPath);
+    const previousApiKey = process.env.CANONKEEPER_LLM_API_KEY;
+    const previousBaseUrl = process.env.CANONKEEPER_LLM_BASE_URL;
+    process.env.CANONKEEPER_LLM_API_KEY = "";
+    process.env.CANONKEEPER_LLM_BASE_URL = "";
 
     fs.writeFileSync(
       path.join(rootPath, "canonkeeper.json"),
@@ -402,6 +406,16 @@ describe("worker RPC integration", () => {
       expect(["answer", "snippets", "not_found"]).toContain(askResult.kind);
     } finally {
       await worker.close();
+      if (previousApiKey === undefined) {
+        delete process.env.CANONKEEPER_LLM_API_KEY;
+      } else {
+        process.env.CANONKEEPER_LLM_API_KEY = previousApiKey;
+      }
+      if (previousBaseUrl === undefined) {
+        delete process.env.CANONKEEPER_LLM_BASE_URL;
+      } else {
+        process.env.CANONKEEPER_LLM_BASE_URL = previousBaseUrl;
+      }
     }
     },
     90_000

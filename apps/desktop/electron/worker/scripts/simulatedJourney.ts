@@ -66,7 +66,7 @@ class RpcWorkerHarness {
     }
     this.child = fork(workerPath, [], {
       stdio: ["ignore", "pipe", "pipe", "ipc"],
-      execPath: tsxPath
+      execArgv: ["--import=tsx"]
     });
     this.child.on("message", (message: unknown) => {
       if (!message || typeof message !== "object") {

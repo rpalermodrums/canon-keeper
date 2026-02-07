@@ -56,7 +56,7 @@ export class WorkerClient {
       }
       child = fork(workerTsPath, [], {
         stdio: ["pipe", "pipe", "pipe", "ipc"],
-        execPath: tsxPath
+        execArgv: ["--import=tsx"]
       });
     } else {
       if (!fs.existsSync(workerJsPath)) {
