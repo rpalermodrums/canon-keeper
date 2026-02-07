@@ -18,7 +18,8 @@ contextBridge.exposeInMainWorld("canonkeeper", {
     getHistory: async () => ipcRenderer.invoke("project:getHistory"),
     addDocument: async (payload: { path: string }) =>
       ipcRenderer.invoke("project:addDocument", payload),
-    stats: async () => ipcRenderer.invoke("project:stats")
+    stats: async () => ipcRenderer.invoke("project:stats"),
+    evidenceCoverage: async () => ipcRenderer.invoke("project:evidenceCoverage")
   },
   system: {
     healthCheck: async () => ipcRenderer.invoke("system:healthCheck")
@@ -64,5 +65,9 @@ contextBridge.exposeInMainWorld("canonkeeper", {
   export: {
     run: async (payload: { outDir: string; kind?: "md" | "json" }) =>
       ipcRenderer.invoke("export:run", payload)
+  },
+  jobs: {
+    list: async () => ipcRenderer.invoke("jobs:list"),
+    cancel: async (payload: { jobId: string }) => ipcRenderer.invoke("jobs:cancel", payload)
   }
 });

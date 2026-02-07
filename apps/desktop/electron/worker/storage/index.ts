@@ -24,12 +24,14 @@ export {
   replaceScenesForDocument,
   listScenesForProject,
   getSceneById,
+  getSceneIdsForChunkIds,
   updateSceneMetadata,
   replaceSceneEntities
 } from "./sceneRepo";
 export {
   insertSceneEvidence,
   listSceneEvidence,
+  countSceneEvidenceCoverage,
   deleteSceneEvidenceForDocument,
   deleteSceneEvidenceForScene
 } from "./sceneEvidenceRepo";
@@ -53,6 +55,7 @@ export {
   listIssues,
   type ListIssueFilters,
   listIssuesWithEvidence,
+  countIssueEvidenceCoverage,
   dismissIssue,
   undoDismissIssue,
   resolveIssue,
@@ -71,6 +74,8 @@ export {
   failJob,
   getQueueDepth,
   resetRunningJobs,
+  listQueuedJobs,
+  cancelJob,
   type JobQueueRow
 } from "./jobQueueRepo";
 export {

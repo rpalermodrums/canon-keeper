@@ -7,7 +7,8 @@ export default defineConfig({
   root: path.resolve(__dirname),
   plugins: [react(), tailwindcss()],
   server: {
-    port: 5173
+    port: 5173,
+    strictPort: true
   },
   build: {
     outDir: path.resolve(__dirname, "../dist-renderer"),

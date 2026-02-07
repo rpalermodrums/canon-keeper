@@ -8,6 +8,7 @@ import {
   getBundledFixturePath,
   getProjectDiagnostics,
   getProjectStats,
+  getEvidenceCoverage,
   getEntity,
   getProcessingState,
   getProjectHistory,
@@ -29,6 +30,7 @@ import {
   type AskResponse,
   type EntityDetail,
   type EntitySummary,
+  type EvidenceCoverage,
   type EvidenceItem,
   type ExportResult,
   type IngestResult,
@@ -98,6 +100,7 @@ type IssueFilters = {
   severity: "all" | "low" | "medium" | "high";
   type: string;
   query: string;
+  sort: "recency" | "severity" | "type";
 };
 
 type EntityFilters = {
@@ -210,6 +213,7 @@ export function useCanonkeeperApp() {
   } | null>(null);
   const [lastIngest, setLastIngest] = useState<IngestResult | null>(null);
   const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
+  const [evidenceCoverage, setEvidenceCoverage] = useState<EvidenceCoverage | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchQueryResponse | null>(null);
@@ -232,7 +236,8 @@ export function useCanonkeeperApp() {
       status: "open",
       severity: "all",
       type: "",
-      query: ""
+      query: "",
+      sort: "recency"
     })
   );
 
@@ -354,6 +359,18 @@ export function useCanonkeeperApp() {
     }
   }, [project]);
 
+  const refreshEvidenceCoverage = useCallback(async () => {
+    if (!project) {
+      return;
+    }
+    try {
+      const coverage = await getEvidenceCoverage();
+      setEvidenceCoverage(coverage);
+    } catch {
+      // evidence coverage is non-critical; silently ignore failures
+    }
+  }, [project]);
+
   const refreshScenes = useCallback(async () => {
     const list = await listScenes();
     setScenes(list);
@@ -398,12 +415,13 @@ export function useCanonkeeperApp() {
     await Promise.all([
       refreshProcessingAndHistory(),
       refreshProjectStats(),
+      refreshEvidenceCoverage(),
       refreshScenes(),
       refreshIssues(),
       refreshStyle(),
       refreshEntities()
     ]);
-  }, [project, refreshEntities, refreshIssues, refreshProcessingAndHistory, refreshProjectStats, refreshScenes, refreshStyle]);
+  }, [project, refreshEntities, refreshEvidenceCoverage, refreshIssues, refreshProcessingAndHistory, refreshProjectStats, refreshScenes, refreshStyle]);
 
   const setAppError = useCallback((code: string, err: unknown, actionLabel?: string, action?: string) => {
     setError(toUserFacingError(code, err, actionLabel, action));
@@ -421,6 +439,14 @@ export function useCanonkeeperApp() {
       setActiveEvidenceContext(null);
     }
   }, [activeSection, evidencePinned]);
+
+  // Auto-route to Setup when no project is open on initial load
+  useEffect(() => {
+    if (!project && activeSection === "dashboard") {
+      setActiveSection("setup");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onResize = () => {
@@ -1014,6 +1040,7 @@ export function useCanonkeeperApp() {
     history,
     lastIngest,
     projectStats,
+    evidenceCoverage,
     rootPath,
     setRootPath,
     docPath,

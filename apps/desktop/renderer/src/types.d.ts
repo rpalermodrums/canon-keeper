@@ -126,6 +126,10 @@ declare global {
           totalScenes: number;
           totalIssues: number;
         }>;
+        evidenceCoverage: () => Promise<{
+          issues: { total: number; withEvidence: number };
+          scenes: { total: number; withEvidence: number };
+        }>;
       };
       system: {
         healthCheck: () => Promise<SystemHealthCheck>;
@@ -288,6 +292,19 @@ declare global {
       };
       export: {
         run: (payload: { outDir: string; kind?: "md" | "json" }) => Promise<ExportRunResult>;
+      };
+      jobs: {
+        list: () => Promise<
+          Array<{
+            id: string;
+            type: string;
+            status: string;
+            attempts: number;
+            created_at: number;
+            updated_at: number;
+          }>
+        >;
+        cancel: (payload: { jobId: string }) => Promise<{ ok: boolean }>;
       };
     };
   }

@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import crypto from "node:crypto";
 import type { IssueSeverity, IssueStatus, IssueType } from "../../../../../packages/shared/types/persisted";
 import { createEvidenceMapper } from "../utils/evidence";
+import { getSceneIdsForChunkIds } from "./sceneRepo";
 
 export type IssueInsert = {
   projectId: string;
@@ -143,6 +144,7 @@ export function listIssuesWithEvidence(
       excerpt: string;
       lineStart: number | null;
       lineEnd: number | null;
+      sceneId: string | null;
     }>;
   }
 > {
@@ -163,6 +165,9 @@ export function listIssuesWithEvidence(
     quote_end: number;
   }>;
 
+  const allChunkIds = [...new Set(evidenceRows.map((row) => row.chunk_id))];
+  const chunkToScene = getSceneIdsForChunkIds(db, allChunkIds);
+
   const evidenceMap = new Map<
     string,
     Array<{
@@ -174,12 +179,17 @@ export function listIssuesWithEvidence(
       excerpt: string;
       lineStart: number | null;
       lineEnd: number | null;
+      sceneId: string | null;
     }>
   >();
   const mapEvidence = createEvidenceMapper(db);
   for (const row of evidenceRows) {
     const list = evidenceMap.get(row.issue_id) ?? [];
-    list.push(mapEvidence(row));
+    const mapped = mapEvidence(row);
+    list.push({
+      ...mapped,
+      sceneId: chunkToScene.get(row.chunk_id) ?? null
+    });
     evidenceMap.set(row.issue_id, list);
   }
 
@@ -253,6 +263,27 @@ export function deleteIssuesByTypeAndDocument(
     db,
     issueRows.map((row) => row.id)
   );
+}
+
+export function countIssueEvidenceCoverage(
+  db: Database.Database,
+  projectId: string
+): { total: number; withEvidence: number } {
+  const total = (
+    db
+      .prepare("SELECT COUNT(*) AS cnt FROM issue WHERE project_id = ? AND status = 'open'")
+      .get(projectId) as { cnt: number }
+  ).cnt;
+
+  const withEvidence = (
+    db
+      .prepare(
+        "SELECT COUNT(DISTINCT i.id) AS cnt FROM issue i JOIN issue_evidence e ON e.issue_id = i.id WHERE i.project_id = ? AND i.status = 'open'"
+      )
+      .get(projectId) as { cnt: number }
+  ).cnt;
+
+  return { total, withEvidence };
 }
 
 export function deleteIssuesByTypeAndChunkIds(

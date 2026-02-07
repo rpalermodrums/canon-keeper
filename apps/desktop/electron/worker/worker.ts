@@ -23,7 +23,11 @@ import {
   markDocumentSeen,
   getDocumentByPath,
   countChunksForProject,
-  countDocumentsForProject
+  countDocumentsForProject,
+  countIssueEvidenceCoverage,
+  countSceneEvidenceCoverage,
+  listQueuedJobs,
+  cancelJob
 } from "./storage";
 import { ingestDocument } from "./pipeline/ingest";
 import { PersistentJobQueue } from "./jobs/persistentQueue";
@@ -664,6 +668,14 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
         totalScenes: listScenesForProject(session.handle.db, currentProjectId).length,
         totalIssues: listIssues(session.handle.db, currentProjectId, { status: "open" }).length
       };
+    case "project.evidenceCoverage":
+      if (!session || !currentProjectId) {
+        throw new Error("Project not initialized");
+      }
+      return {
+        issues: countIssueEvidenceCoverage(session.handle.db, currentProjectId),
+        scenes: countSceneEvidenceCoverage(session.handle.db, currentProjectId)
+      };
     case "project.addDocument":
       {
         if (!params || typeof params !== "object") {
@@ -876,6 +888,19 @@ async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknow
           return { ok: false, error: message };
         }
       }
+    case "jobs.list":
+      if (!session || !currentProjectId) {
+        throw new Error("Project not initialized");
+      }
+      return listQueuedJobs(session.handle.db, currentProjectId);
+    case "jobs.cancel":
+      if (!params || typeof params !== "object") {
+        throw new Error("Missing params for jobs.cancel");
+      }
+      if (!session) {
+        throw new Error("Project not initialized");
+      }
+      return { ok: cancelJob(session.handle.db, (params as { jobId: string }).jobId) };
     default:
       throw new Error(`Unknown method: ${method}`);
   }
@@ -900,7 +925,9 @@ process.on("message", async (message: RpcRequest) => {
     method !== "project.getStatus" &&
     method !== "project.subscribeStatus" &&
     method !== "project.getDiagnostics" &&
-    method !== "project.stats";
+    method !== "project.stats" &&
+    method !== "project.evidenceCoverage" &&
+    method !== "jobs.list";
 
   try {
     if (shouldTrackRpcAsBusy) {

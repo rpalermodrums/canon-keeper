@@ -1,5 +1,5 @@
 import { useMemo, useState, type JSX } from "react";
-import { Activity, MessageSquare, Palette, Quote, RefreshCw, Repeat } from "lucide-react";
+import { Activity, BookOpen, MessageSquare, Palette, Quote, RefreshCw, Repeat } from "lucide-react";
 import type { EvidenceItem, IssueSummary, StyleReport } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { TogglePill } from "../components/TogglePill";
@@ -26,6 +26,7 @@ type StyleViewProps = {
   onRefresh: () => void;
   onOpenIssueEvidence: (title: string, issue: IssueSummary) => void;
   onOpenMetricEvidence: (title: string, evidence: EvidenceItem[]) => void;
+  onNavigateToScene?: (sceneId: string) => void;
 };
 
 function toRepetitionEntries(report: StyleReport | null): RepetitionEntry[] {
@@ -45,7 +46,8 @@ export function StyleView({
   styleIssues,
   onRefresh,
   onOpenIssueEvidence,
-  onOpenMetricEvidence
+  onOpenMetricEvidence,
+  onNavigateToScene
 }: StyleViewProps): JSX.Element {
   const [sortBy, setSortBy] = useState<"count" | "ngram">("count");
   const entries = useMemo(() => {
@@ -162,22 +164,37 @@ export function StyleView({
               <p className="text-sm text-text-muted">No tone shift issues detected.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {toneIssues.map((issue) => (
-                  <div key={issue.id} className="flex items-start justify-between gap-3 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
-                    <div>
-                      <strong className="text-sm">{issue.title}</strong>
-                      <div className="mt-0.5 text-xs text-text-muted">{issue.description}</div>
+                {toneIssues.map((issue) => {
+                  const sceneEvidence = issue.evidence.find((e) => e.sceneId);
+                  return (
+                    <div key={issue.id} className="flex items-start justify-between gap-3 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
+                      <div>
+                        <strong className="text-sm">{issue.title}</strong>
+                        <div className="mt-0.5 text-xs text-text-muted">{issue.description}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
+                          type="button"
+                          onClick={() => onOpenIssueEvidence(issue.title, issue)}
+                        >
+                          <Quote size={12} />
+                          Evidence ({issue.evidence.length})
+                        </button>
+                        {sceneEvidence?.sceneId && onNavigateToScene ? (
+                          <button
+                            className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
+                            type="button"
+                            onClick={() => onNavigateToScene(sceneEvidence.sceneId!)}
+                          >
+                            <BookOpen size={12} />
+                            View Scene
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                    <button
-                      className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
-                      type="button"
-                      onClick={() => onOpenIssueEvidence(issue.title, issue)}
-                    >
-                      <Quote size={12} />
-                      Evidence ({issue.evidence.length})
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </article>
@@ -192,22 +209,37 @@ export function StyleView({
               <p className="text-sm text-text-muted">No dialogue habit issues detected.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {dialogueIssues.map((issue) => (
-                  <div key={issue.id} className="flex items-start justify-between gap-3 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
-                    <div>
-                      <strong className="text-sm">{issue.title}</strong>
-                      <div className="mt-0.5 text-xs text-text-muted">{issue.description}</div>
+                {dialogueIssues.map((issue) => {
+                  const sceneEvidence = issue.evidence.find((e) => e.sceneId);
+                  return (
+                    <div key={issue.id} className="flex items-start justify-between gap-3 rounded-sm border border-border bg-surface-1/30 p-3 dark:bg-surface-1/20">
+                      <div>
+                        <strong className="text-sm">{issue.title}</strong>
+                        <div className="mt-0.5 text-xs text-text-muted">{issue.description}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
+                          type="button"
+                          onClick={() => onOpenIssueEvidence(issue.title, issue)}
+                        >
+                          <Quote size={12} />
+                          Evidence ({issue.evidence.length})
+                        </button>
+                        {sceneEvidence?.sceneId && onNavigateToScene ? (
+                          <button
+                            className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
+                            type="button"
+                            onClick={() => onNavigateToScene(sceneEvidence.sceneId!)}
+                          >
+                            <BookOpen size={12} />
+                            View Scene
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                    <button
-                      className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
-                      type="button"
-                      onClick={() => onOpenIssueEvidence(issue.title, issue)}
-                    >
-                      <Quote size={12} />
-                      Evidence ({issue.evidence.length})
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </article>

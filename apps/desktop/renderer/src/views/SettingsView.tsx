@@ -1,6 +1,12 @@
-import type { JSX } from "react";
-import { CheckCircle, RefreshCw, Settings } from "lucide-react";
-import type { ProjectDiagnostics, WorkerStatus } from "../api/ipc";
+import { useCallback, useEffect, useState, type JSX } from "react";
+import { CheckCircle, ListTodo, RefreshCw, Settings, X } from "lucide-react";
+import {
+  type ProjectDiagnostics,
+  type QueuedJob,
+  type WorkerStatus,
+  listQueuedJobs,
+  cancelJob
+} from "../api/ipc";
 import { StatusBadge } from "../components/StatusBadge";
 import { ThemeToggle, type Theme } from "../components/ThemeToggle";
 
@@ -29,6 +35,18 @@ const HEALTH_KEY_LABELS: Record<string, string> = {
   writable: "File Access"
 };
 
+const JOB_TYPE_LABELS: Record<string, string> = {
+  INGEST_DOCUMENT: "Read manuscript",
+  RUN_SCENES: "Build scene index",
+  RUN_STYLE: "Analyze style",
+  RUN_EXTRACTION: "Extract characters & world",
+  RUN_CONTINUITY: "Check continuity"
+};
+
+function formatJobTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export function SettingsView({
   status,
   healthCheck,
@@ -38,6 +56,29 @@ export function SettingsView({
   sidebarCollapsed,
   onSidebarCollapsedChange
 }: SettingsViewProps): JSX.Element {
+  const [queuedJobs, setQueuedJobs] = useState<QueuedJob[]>([]);
+
+  const refreshQueue = useCallback(async () => {
+    try {
+      const jobs = await listQueuedJobs();
+      setQueuedJobs(jobs);
+    } catch {
+      // IPC may not be available yet
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshQueue();
+  }, [refreshQueue]);
+
+  const handleCancelJob = useCallback(
+    async (jobId: string) => {
+      await cancelJob(jobId);
+      await refreshQueue();
+    },
+    [refreshQueue]
+  );
+
   return (
     <section className="flex flex-col gap-4">
       <header>
@@ -116,6 +157,47 @@ export function SettingsView({
           )}
         </article>
       ) : null}
+
+      {/* Processing Queue */}
+      <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
+        <div className="flex items-center gap-2">
+          <ListTodo size={16} className="text-text-muted" />
+          <h3 className="m-0 text-sm font-semibold">Processing Queue</h3>
+        </div>
+        {queuedJobs.length === 0 ? (
+          <p className="text-sm text-text-muted">No pending jobs.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {queuedJobs.map((job) => (
+              <div
+                key={job.id}
+                className="flex items-center justify-between gap-3 rounded-sm border border-border bg-surface-1/30 px-3 py-2 dark:bg-surface-1/20"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-text-primary">
+                    {JOB_TYPE_LABELS[job.type] ?? job.type}
+                  </span>
+                  <span className="text-xs text-text-muted">
+                    {job.status === "failed" ? `Retrying (attempt ${job.attempts})` : "Queued"}
+                    {" \u00b7 "}
+                    {formatJobTime(job.created_at)}
+                  </span>
+                </div>
+                {job.status === "queued" ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-sm border border-danger/30 bg-danger-soft px-2.5 py-1 text-xs font-medium text-danger transition-colors hover:bg-danger/20 cursor-pointer"
+                    onClick={() => void handleCancelJob(job.id)}
+                  >
+                    <X size={12} />
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
 
       {/* About */}
       <article className="rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">

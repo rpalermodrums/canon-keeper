@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { AlertTriangle, CheckCircle, Quote, RefreshCw, Search, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, CheckCircle, Quote, RefreshCw, Search, XCircle } from "lucide-react";
 import type { IssueSummary } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { FilterBar, FilterGroup } from "../components/FilterBar";
@@ -11,6 +11,7 @@ type IssueFilters = {
   severity: "all" | "low" | "medium" | "high";
   type: string;
   query: string;
+  sort: "recency" | "severity" | "type";
 };
 
 type IssuesViewProps = {
@@ -24,6 +25,7 @@ type IssuesViewProps = {
   onRequestDismiss: (issue: IssueSummary) => void;
   onResolve: (issueId: string) => void;
   onOpenEvidence: (title: string, issue: IssueSummary) => void;
+  onNavigateToScene?: (sceneId: string) => void;
 };
 
 const ISSUE_TYPE_LABELS: Record<string, string> = {
@@ -56,6 +58,16 @@ const severityOptions = [
   { value: "high" as const, label: "High" }
 ];
 
+const sortOptions = [
+  { value: "recency" as const, label: "Newest" },
+  { value: "severity" as const, label: "Severity" },
+  { value: "type" as const, label: "Type" }
+];
+
+const SEVERITY_WEIGHT: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+const STYLE_ISSUE_TYPES = new Set(["repetition", "tone_drift", "dialogue_tic"]);
+
 export function IssuesView({
   busy,
   issues,
@@ -66,16 +78,34 @@ export function IssuesView({
   onSelectIssue,
   onRequestDismiss,
   onResolve,
-  onOpenEvidence
+  onOpenEvidence,
+  onNavigateToScene
 }: IssuesViewProps): JSX.Element {
-  const filtered = issues.filter((issue) => {
-    const statusMatch = filters.status === "all" || issue.status === filters.status;
-    const severityMatch = filters.severity === "all" || issue.severity === filters.severity;
-    const typeMatch = !filters.type || issue.type === filters.type;
-    const q = filters.query.trim().toLowerCase();
-    const queryMatch = q.length === 0 || `${issue.title} ${issue.description} ${issue.type}`.toLowerCase().includes(q);
-    return statusMatch && severityMatch && typeMatch && queryMatch;
-  });
+  const isStyleOnly = filters.type === "__style__";
+
+  const filtered = issues
+    .filter((issue) => {
+      const statusMatch = filters.status === "all" || issue.status === filters.status;
+      const severityMatch = filters.severity === "all" || issue.severity === filters.severity;
+      const typeMatch = isStyleOnly
+        ? STYLE_ISSUE_TYPES.has(issue.type)
+        : !filters.type || issue.type === filters.type;
+      const q = filters.query.trim().toLowerCase();
+      const queryMatch = q.length === 0 || `${issue.title} ${issue.description} ${issue.type}`.toLowerCase().includes(q);
+      return statusMatch && severityMatch && typeMatch && queryMatch;
+    })
+    .sort((a, b) => {
+      if (filters.sort === "severity") {
+        const wa = SEVERITY_WEIGHT[a.severity] ?? 3;
+        const wb = SEVERITY_WEIGHT[b.severity] ?? 3;
+        return wa !== wb ? wa - wb : b.created_at - a.created_at;
+      }
+      if (filters.sort === "type") {
+        const cmp = a.type.localeCompare(b.type);
+        return cmp !== 0 ? cmp : b.created_at - a.created_at;
+      }
+      return b.created_at - a.created_at;
+    });
 
   const knownTypes = Array.from(new Set(issues.map((issue) => issue.type))).sort();
 
@@ -105,7 +135,7 @@ export function IssuesView({
           <button
             className="rounded-sm border border-transparent bg-transparent px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-primary cursor-pointer"
             type="button"
-            onClick={() => onFiltersChange({ status: "open", severity: "all", type: "", query: "" })}
+            onClick={() => onFiltersChange({ status: "open", severity: "all", type: "", query: "", sort: "recency" })}
           >
             Reset
           </button>
@@ -123,13 +153,25 @@ export function IssuesView({
           value={filters.severity}
           onChange={(v) => onFiltersChange({ ...filters, severity: v })}
         />
+        <TogglePill
+          label="Sort"
+          options={sortOptions}
+          value={filters.sort}
+          onChange={(v) => onFiltersChange({ ...filters, sort: v })}
+        />
         <FilterGroup label="Type">
-          <select value={filters.type} onChange={(e) => onFiltersChange({ ...filters, type: e.target.value })}>
-            <option value="">All</option>
-            {knownTypes.map((type) => (
-              <option key={type} value={type}>{ISSUE_TYPE_LABELS[type] ?? type}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={isStyleOnly ? "__style__" : filters.type}
+              onChange={(e) => onFiltersChange({ ...filters, type: e.target.value })}
+            >
+              <option value="">All</option>
+              <option value="__style__">Style only</option>
+              {knownTypes.map((type) => (
+                <option key={type} value={type}>{ISSUE_TYPE_LABELS[type] ?? type}</option>
+              ))}
+            </select>
+          </div>
         </FilterGroup>
         <FilterGroup label="Query">
           <div className="relative">
@@ -189,6 +231,20 @@ export function IssuesView({
                       <Quote size={12} />
                       Evidence ({issue.evidence.length})
                     </button>
+                    {(() => {
+                      const sceneEvidence = issue.evidence.find((e) => e.sceneId);
+                      if (!sceneEvidence?.sceneId || !onNavigateToScene) return null;
+                      return (
+                        <button
+                          className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer"
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onNavigateToScene(sceneEvidence.sceneId!); }}
+                        >
+                          <BookOpen size={12} />
+                          View Scene
+                        </button>
+                      );
+                    })()}
                     <button
                       className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
                       type="button"

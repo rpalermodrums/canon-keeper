@@ -139,6 +139,7 @@ export function App(): JSX.Element {
                 history={app.history}
                 lastIngest={app.lastIngest}
                 projectStats={app.projectStats}
+                evidenceCoverage={app.evidenceCoverage}
                 continueIssueId={app.continueContext.issueId}
                 continueEntityId={app.continueContext.entityId}
                 continueSceneId={app.continueContext.sceneId}
@@ -207,6 +208,10 @@ export function App(): JSX.Element {
                 onRequestDismiss={app.onRequestDismissIssue}
                 onResolve={(issueId) => void app.onResolveIssue(issueId)}
                 onOpenEvidence={(title, issue) => app.onOpenEvidenceFromIssue(title, issue)}
+                onNavigateToScene={(sceneId) => {
+                  app.setActiveSection("scenes");
+                  void app.onSelectScene(sceneId);
+                }}
               />
             ) : null}
 
@@ -223,6 +228,10 @@ export function App(): JSX.Element {
                     sourceId: title.toLowerCase().replace(/\s+/g, "-")
                   })
                 }
+                onNavigateToScene={(sceneId) => {
+                  app.setActiveSection("scenes");
+                  void app.onSelectScene(sceneId);
+                }}
               />
             ) : null}
 

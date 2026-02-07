@@ -143,6 +143,36 @@ export function updateSceneMetadata(
   );
 }
 
+export function getSceneIdsForChunkIds(
+  db: Database.Database,
+  chunkIds: string[]
+): Map<string, string> {
+  const result = new Map<string, string>();
+  if (chunkIds.length === 0) return result;
+
+  const placeholders = chunkIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT c.id AS chunk_id, s.id AS scene_id
+       FROM chunk c
+       JOIN scene s ON s.document_id = c.document_id
+       JOIN chunk sc_start ON sc_start.id = s.start_chunk_id
+       JOIN chunk sc_end ON sc_end.id = s.end_chunk_id
+       WHERE c.id IN (${placeholders})
+         AND c.ordinal >= sc_start.ordinal
+         AND c.ordinal <= sc_end.ordinal`
+    )
+    .all(...chunkIds) as Array<{ chunk_id: string; scene_id: string }>;
+
+  for (const row of rows) {
+    if (!result.has(row.chunk_id)) {
+      result.set(row.chunk_id, row.scene_id);
+    }
+  }
+
+  return result;
+}
+
 export function replaceSceneEntities(
   db: Database.Database,
   sceneId: string,

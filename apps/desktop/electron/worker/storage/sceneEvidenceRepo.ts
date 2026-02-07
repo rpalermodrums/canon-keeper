@@ -37,6 +37,27 @@ export function listSceneEvidence(db: Database.Database, sceneId: string): Array
   }>;
 }
 
+export function countSceneEvidenceCoverage(
+  db: Database.Database,
+  projectId: string
+): { total: number; withEvidence: number } {
+  const total = (
+    db
+      .prepare("SELECT COUNT(*) AS cnt FROM scene WHERE project_id = ?")
+      .get(projectId) as { cnt: number }
+  ).cnt;
+
+  const withEvidence = (
+    db
+      .prepare(
+        "SELECT COUNT(DISTINCT s.id) AS cnt FROM scene s JOIN scene_evidence e ON e.scene_id = s.id WHERE s.project_id = ?"
+      )
+      .get(projectId) as { cnt: number }
+  ).cnt;
+
+  return { total, withEvidence };
+}
+
 export function deleteSceneEvidenceForDocument(db: Database.Database, documentId: string): void {
   db.prepare(
     "DELETE FROM scene_evidence WHERE scene_id IN (SELECT id FROM scene WHERE document_id = ?)"

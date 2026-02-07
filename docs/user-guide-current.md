@@ -17,17 +17,19 @@ It does **not** rewrite your manuscript.
 
 ## Recommended Workflow
 
-1. Open **Setup** and create/open a project root.
-2. Add source files with **Add document**.
-3. Wait for worker status to return to **Idle**.
-4. Run **Diagnostics** (Setup or Settings) and confirm all checks pass.
-5. Review **Scenes** for structure + metadata + evidence.
-6. Review **Issues** and triage with dismiss/undo/resolve.
-7. Review **Style** for repetition, tone drift, dialogue habits.
-8. Use **Characters & World** to inspect claims and confirm facts.
-9. Use **Search** for direct snippet retrieval.
-10. Use **Ask** for cited answers; verify citations.
-11. Use **Exports** to generate Markdown/JSON.
+1. Open the app — if no project is open, you'll be directed to **Setup** automatically.
+2. Create/open a project root in **Setup**.
+3. Add source files with **Add document**.
+4. Wait for worker status to return to **Idle**.
+5. Run **Diagnostics** (Setup or Settings) and confirm all checks pass.
+6. Review **Home** for project stats, document progress, and evidence health.
+7. Review **Scenes** for structure + metadata + evidence.
+8. Review **Issues** and triage with dismiss/undo/resolve. Use sort and filter controls to prioritize.
+9. Review **Style** for repetition, tone drift, dialogue habits.
+10. Use **Characters & World** to inspect claims and confirm facts.
+11. Use **Search** for direct snippet retrieval.
+12. Use **Ask** for cited answers; verify citations.
+13. Use **Exports** to generate Markdown/JSON.
 
 ## Feature-by-Feature Guide
 
@@ -36,13 +38,16 @@ It does **not** rewrite your manuscript.
 - Use a dedicated project folder (recommended: empty folder per manuscript/project).
 - Add documents one by one if you want easier troubleshooting.
 - For long-form text, keep clear headings/scene markers where possible for better scene segmentation.
+- The app automatically routes new users to Setup when no project is open.
+- Setup has a 3-step guided flow: open project folder, add manuscripts, run diagnostics.
 
 ## Home
 
-- Shows project status, processing state, and health signals.
-- Use it as a quick check after edits/ingest.
-
-Note: in this build, “Last processed” can underreport work done (for example, showing `Processed 1 passages` after a large ingest).
+- Shows project stats: total passages, documents, scenes, and open issues.
+- **Document Progress** section shows per-document pipeline status with a mini timeline of 5 stages (Ingesting, Finding scenes, Analyzing style, Extracting details, Checking continuity) with color-coded status indicators.
+- **Evidence Backing** card shows what percentage of issues and scenes are backed by evidence (green >80%, yellow >50%, red <50%).
+- **Continue Where You Left Off** shortcuts resume your last issue, entity, or scene review.
+- **Notices** section (collapsible) shows warnings like moved/deleted manuscript files with friendly language and recovery notes.
 
 ## Scenes
 
@@ -52,37 +57,40 @@ Note: in this build, “Last processed” can underreport work done (for example
 
 ## Issues
 
-- Issue types currently observed: continuity, repetition, tone drift, dialogue tics.
-- Each issue should be evidence-backed via quote spans.
-- Dismiss requires a reason; undo re-opens the issue.
-
-Important current behavior: resolve flow appears inconsistent (resolved issues may disappear instead of appearing in the resolved filter; see Known Issues).
+- Issue types: continuity, repetition, tone drift, dialogue tics, contradiction, timeline issue, character inconsistency, setting inconsistency.
+- Each issue is evidence-backed via quote spans.
+- **Dismiss** requires a reason; undo re-opens the issue via toast action.
+- **Resolve** marks an issue as resolved with an undo toast to reverse it.
+- Resolved and dismissed issues are preserved when the pipeline re-runs — user decisions are never lost.
+- **Sort controls**: Newest (default), Severity (high > medium > low), or Type grouping.
+- **Filters**: status (open/dismissed/resolved/all), severity, type (including "Style only" quick filter), and text search.
+- **View Scene** button on issue cards navigates directly to the related scene for context.
 
 ## Style
 
 - Style view provides diagnostic outputs only (no rewrites).
-- Repetition and tone drift entries link to evidence.
+- Repetition entries show detected phrases with occurrence counts and evidence.
+- Tone drift entries show drift scores with evidence.
 - Dialogue habits are tracked per character where attribution exists.
+- **View Scene** button on style issues navigates to the related scene.
 
 ## Characters & World (Bible)
 
 - Entity list shows extracted character/world entities.
 - Entity detail shows claim groups by field with supporting evidence.
-- **Confirm** promotes a claim to canon and should preserve evidence.
-
-Observed working flow: confirming Lina’s `eye_color="green"` persisted as `confirmed` and retained evidence.
+- **Confirm** promotes a claim to canon and preserves evidence.
 
 ## Search
 
 - Use for literal/snippet retrieval from ingested text.
-- Works well for terms/tokens (`candlelight` returned matches in this run).
+- Handles natural language queries by filtering stopwords and punctuation for better FTS matches.
+- Falls back to broader OR-based search when strict AND matching returns no results.
 
 ## Ask
 
-- Intended behavior: return `answer`/snippets with citations or `not_found`.
-- Current tested behavior: known factual questions sometimes return `Not Found` even when searchable evidence exists.
-
-Treat Ask as conservative until retrieval wiring improves.
+- Returns cited snippets with evidence from the manuscript.
+- Extracts key terms from questions (strips stopwords, question prefixes) for more targeted search.
+- Falls back to broader search strategies when initial query returns no results.
 
 ## Exports
 
@@ -95,20 +103,24 @@ Treat Ask as conservative until retrieval wiring improves.
 ## Settings
 
 - Run diagnostics to validate app/worker/storage/IPC health.
-- Use this before and after long ingest runs.
+- **Processing Queue** section shows pending and retrying jobs with cancel support for queued items.
+- Use diagnostics before and after long ingest runs.
 
 ## Effective Use Tips
 
 - Keep canon-critical facts explicit in text near stable names to improve evidence mapping.
 - Confirm key canon facts early (e.g., appearance, relationships, locations).
+- Use the sort-by-severity option to focus on high-impact issues first.
+- Click "View Scene" on issue cards to see the full scene context around a problem.
+- Check the Evidence Backing card on Home to gauge how well your manuscript is indexed.
 - Treat issues as a review queue; close only after explicit resolution.
-- Prefer Search for exact evidence retrieval when Ask is uncertain.
+- Use Search for exact evidence retrieval; Ask works well for natural language questions.
 - Export regularly to keep portable snapshots of current state.
 
-## Known Issues from This Full-Journey Run
+## Previously Known Issues — All Resolved
 
-1. **Issue resolve lifecycle bug**: resolved issues were not visible under resolved state and continuity disappeared from filters after resolve.
-2. **Ask known-question failure**: known questions returned `Not Found` despite searchable supporting snippets.
-3. **Repetition bug**: repetition issues rendered `"undefined"` phrase and count.
-4. **Home status metric mismatch**: passage count appears inaccurate after large ingest.
-5. **One warning in event log**: `file_missing` for a stale temp path (`/tmp/.../simple_md.md`).
+1. ~~Issue resolve lifecycle bug~~: **Fixed** — resolve now has undo toast, resolved issues remain visible under the "Resolved" filter, and user decisions survive pipeline re-runs.
+2. ~~Ask known-question failure~~: **Fixed** — stopword filtering, punctuation stripping, and OR fallback ensure natural language questions find relevant evidence.
+3. ~~Repetition bug~~: **Fixed** — repetition issues now correctly display phrase text and occurrence counts with validation guards.
+4. ~~Home status metric mismatch~~: **Fixed** — dashboard now shows accurate cumulative project stats via dedicated `project.stats` endpoint.
+5. ~~Event log file_missing warning~~: **Fixed** — friendly "Notices" section in dashboard explains moved/deleted files with recovery guidance.

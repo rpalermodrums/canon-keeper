@@ -114,6 +114,7 @@ export type EvidenceItem = {
   excerpt: string;
   lineStart: number | null;
   lineEnd: number | null;
+  sceneId?: string | null;
 };
 
 export type SceneDetail = {
@@ -193,6 +194,11 @@ export type ExportResult =
       ok: false;
       error: string;
     };
+
+export type EvidenceCoverage = {
+  issues: { total: number; withEvidence: number };
+  scenes: { total: number; withEvidence: number };
+};
 
 function requireIpc(): NonNullable<Window["canonkeeper"]> {
   if (!window.canonkeeper) {
@@ -348,6 +354,10 @@ export async function getProjectStats(): Promise<ProjectStats> {
   return requireIpc().project.stats();
 }
 
+export async function getEvidenceCoverage(): Promise<EvidenceCoverage> {
+  return requireIpc().project.evidenceCoverage();
+}
+
 export async function addDocument(payload: { path: string }): Promise<IngestResult> {
   return requireIpc().project.addDocument(payload);
 }
@@ -415,4 +425,21 @@ export async function confirmClaim(payload: {
 
 export async function runExport(outDir: string, kind?: "md" | "json"): Promise<ExportResult> {
   return requireIpc().export.run({ outDir, kind });
+}
+
+export type QueuedJob = {
+  id: string;
+  type: string;
+  status: string;
+  attempts: number;
+  created_at: number;
+  updated_at: number;
+};
+
+export async function listQueuedJobs(): Promise<QueuedJob[]> {
+  return requireIpc().jobs.list();
+}
+
+export async function cancelJob(jobId: string): Promise<{ ok: boolean }> {
+  return requireIpc().jobs.cancel({ jobId });
 }

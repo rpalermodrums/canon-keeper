@@ -136,3 +136,18 @@ export function getQueueDepth(db: Database.Database): number {
     .get() as { count: number } | undefined;
   return row?.count ?? 0;
 }
+
+export function listQueuedJobs(
+  db: Database.Database,
+  projectId: string
+): Array<{ id: string; type: string; status: string; attempts: number; created_at: number; updated_at: number }> {
+  return db
+    .prepare(
+      "SELECT id, type, status, attempts, created_at, updated_at FROM job_queue WHERE project_id = ? AND status IN ('queued', 'failed') ORDER BY created_at"
+    )
+    .all(projectId) as Array<{ id: string; type: string; status: string; attempts: number; created_at: number; updated_at: number }>;
+}
+
+export function cancelJob(db: Database.Database, jobId: string): boolean {
+  return db.prepare("DELETE FROM job_queue WHERE id = ? AND status = 'queued'").run(jobId).changes > 0;
+}

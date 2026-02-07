@@ -12,6 +12,7 @@
   },
   "scripts": {
     "dev": "docker buildx bake dev --load && docker compose up dev",
+    "predev:local": "node -e \"const net = require('net'); const s = net.createServer(); s.once('error', () => { console.error('\\nPort 5173 is already in use. Run: lsof -ti:5173 | xargs kill\\n'); process.exit(1); }); s.listen(5173, () => s.close());\"",
     "dev:local": "bun run --cwd apps/desktop dev",
     "dev:container": "bun run --cwd apps/desktop dev:renderer:host",
     "build": "docker buildx bake build --load && docker compose run --rm build",

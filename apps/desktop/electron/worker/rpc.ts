@@ -19,6 +19,7 @@ export type WorkerMethods =
   | "project.getHistory"
   | "project.addDocument"
   | "project.stats"
+  | "project.evidenceCoverage"
   | "system.healthCheck"
   | "search.query"
   | "search.ask"
@@ -33,4 +34,6 @@ export type WorkerMethods =
   | "bible.listEntities"
   | "bible.getEntity"
   | "canon.confirmClaim"
-  | "export.run";
+  | "export.run"
+  | "jobs.list"
+  | "jobs.cancel";

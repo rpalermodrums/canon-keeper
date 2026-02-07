@@ -256,6 +256,12 @@ app.whenReady().then(() => {
     }
     return workerClient.request("project.stats");
   });
+  ipcMain.handle("project:evidenceCoverage", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("project.evidenceCoverage");
+  });
   ipcMain.handle("project:addDocument", async (_event, payload) => {
     if (!workerClient) {
       throw new Error("Worker not initialized");
@@ -351,6 +357,18 @@ app.whenReady().then(() => {
       throw new Error("Worker not initialized");
     }
     return workerClient.request("export.run", payload);
+  });
+  ipcMain.handle("jobs:list", async () => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("jobs.list");
+  });
+  ipcMain.handle("jobs:cancel", async (_event, payload) => {
+    if (!workerClient) {
+      throw new Error("Worker not initialized");
+    }
+    return workerClient.request("jobs.cancel", payload);
   });
 
   app.on("activate", () => {
