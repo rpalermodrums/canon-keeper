@@ -1,12 +1,12 @@
 import type { JSX } from "react";
 import { CheckCircle, RefreshCw, Settings } from "lucide-react";
-import type { SystemHealthCheck, WorkerStatus } from "../api/ipc";
+import type { ProjectDiagnostics, WorkerStatus } from "../api/ipc";
 import { StatusBadge } from "../components/StatusBadge";
 import { ThemeToggle, type Theme } from "../components/ThemeToggle";
 
 type SettingsViewProps = {
   status: WorkerStatus | null;
-  healthCheck: SystemHealthCheck | null;
+  healthCheck: ProjectDiagnostics | null;
   onRunDiagnostics: () => void;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
@@ -85,9 +85,9 @@ export function SettingsView({
               </div>
             ))}
           </div>
-          {healthCheck.details.length > 0 ? (
+          {(healthCheck.recommendations ?? healthCheck.details).length > 0 ? (
             <div className="flex flex-col gap-1.5">
-              {healthCheck.details.map((detail) => (
+              {(healthCheck.recommendations ?? healthCheck.details).map((detail) => (
                 <div key={detail} className="rounded-sm border border-border bg-surface-1/30 p-2 text-sm text-text-secondary dark:bg-surface-1/20">
                   {detail}
                 </div>

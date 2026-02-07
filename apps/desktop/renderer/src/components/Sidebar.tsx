@@ -1,16 +1,13 @@
 import type { JSX } from "react";
 import { PanelLeft, PanelLeftClose } from "lucide-react";
 import { APP_SECTIONS, type AppSection } from "../state/useCanonkeeperApp";
-import { ThemeToggle } from "./ThemeToggle";
-import type { Theme } from "./ThemeToggle";
 
 type SidebarProps = {
   activeSection: AppSection;
   onSectionChange: (section: AppSection) => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
+  showCollapseControl?: boolean;
 };
 
 export function Sidebar({
@@ -18,8 +15,7 @@ export function Sidebar({
   onSectionChange,
   collapsed,
   onCollapsedChange,
-  theme,
-  onThemeChange
+  showCollapseControl = true
 }: SidebarProps): JSX.Element {
   return (
     <aside
@@ -37,14 +33,16 @@ export function Sidebar({
             <p className="m-0 text-xs text-text-muted">Editorial Workstation</p>
           </div>
         )}
-        <button
-          className="rounded-sm border border-transparent bg-transparent p-1 text-text-muted transition-colors hover:text-text-primary cursor-pointer"
-          type="button"
-          onClick={() => onCollapsedChange(!collapsed)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
-        </button>
+        {showCollapseControl ? (
+          <button
+            className="rounded-sm border border-transparent bg-transparent p-1 text-text-muted transition-colors hover:text-text-primary cursor-pointer"
+            type="button"
+            onClick={() => onCollapsedChange(!collapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        ) : null}
       </div>
 
       {/* Navigation */}
@@ -76,8 +74,6 @@ export function Sidebar({
 
       {/* Bottom section */}
       <div className={`mt-auto flex flex-col gap-3 pt-4 ${collapsed ? "items-center" : ""}`}>
-        {collapsed ? null : <ThemeToggle theme={theme} onChange={onThemeChange} />}
-
         {collapsed ? null : (
           <div className="rounded-md border border-border bg-white/40 p-2.5 text-xs text-text-muted dark:bg-surface-2/30">
             <p className="m-0 font-medium">Keyboard</p>

@@ -16,6 +16,11 @@ function toneClasses(status: string): string {
     case "confirmed":
       return "text-ok bg-ok-soft border-ok/25";
     case "busy":
+    case "ingest":
+    case "extract":
+    case "style":
+    case "continuity":
+    case "export":
     case "medium":
     case "warn":
     case "inferred":
@@ -35,7 +40,15 @@ function toneClasses(status: string): string {
 
 function isBusy(status: string): boolean {
   const s = status.toLowerCase();
-  return s === "busy" || s === "restarting";
+  return (
+    s === "busy" ||
+    s === "restarting" ||
+    s === "ingest" ||
+    s === "extract" ||
+    s === "style" ||
+    s === "continuity" ||
+    s === "export"
+  );
 }
 
 export function StatusBadge({ label, status, icon: Icon }: StatusBadgeProps): JSX.Element {

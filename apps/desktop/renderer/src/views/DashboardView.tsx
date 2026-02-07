@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { AlertOctagon, AlertTriangle, BookMarked, BookOpen, ChevronRight, Clock, Info, LayoutDashboard } from "lucide-react";
 import type { IngestResult, ProjectSummary, WorkerStatus } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
@@ -44,12 +44,15 @@ type DashboardViewProps = {
 
 function formatWorkerLabel(status: WorkerStatus | null): string {
   if (!status) return "Disconnected";
-  return status.lastJob ? `${status.state} (${status.lastJob})` : status.state;
+  if (status.activeJobLabel) {
+    return `${status.phase} · ${status.activeJobLabel}`;
+  }
+  return status.phase;
 }
 
 function inferStatusTone(status: WorkerStatus | null): string {
   if (!status) return "down";
-  if (status.workerState === "down") return "down";
+  if (status.workerState === "down" || status.phase === "error") return "down";
   return status.state === "busy" ? "busy" : "ok";
 }
 
@@ -72,6 +75,44 @@ export function DashboardView({
   onJumpToEntity,
   onJumpToScene
 }: DashboardViewProps): JSX.Element {
+  const [showRawTimeline, setShowRawTimeline] = useState(false);
+
+  const groupedTimeline = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        stage: string;
+        count: number;
+        latestStatus: string;
+        latestUpdatedAt: number;
+        latestPath: string;
+        latestError: string | null;
+      }
+    >();
+    for (const row of processingState) {
+      const existing = groups.get(row.stage);
+      if (!existing) {
+        groups.set(row.stage, {
+          stage: row.stage,
+          count: 1,
+          latestStatus: row.status,
+          latestUpdatedAt: row.updated_at,
+          latestPath: row.document_path,
+          latestError: row.error
+        });
+        continue;
+      }
+      existing.count += 1;
+      if (row.updated_at > existing.latestUpdatedAt) {
+        existing.latestStatus = row.status;
+        existing.latestUpdatedAt = row.updated_at;
+        existing.latestPath = row.document_path;
+        existing.latestError = row.error;
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => b.latestUpdatedAt - a.latestUpdatedAt);
+  }, [processingState]);
+
   return (
     <section className="flex flex-col gap-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -83,7 +124,6 @@ export function DashboardView({
         </div>
       </header>
 
-      {/* Status cards */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
         <article className="rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
           <div className="flex items-center gap-2 text-sm font-medium text-text-muted">
@@ -129,12 +169,11 @@ export function DashboardView({
         </article>
       </div>
 
-      {/* Continue section */}
       <article className="rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
         <h3 className="m-0 mb-3 text-sm font-semibold">Continue Where You Left Off</h3>
         <div className="flex flex-wrap gap-2">
           {[
-            { label: "Resume Issue", icon: AlertTriangle, enabled: !!continueIssueId, onClick: onJumpToIssue },
+            { label: "Resume Continuity Question", icon: AlertTriangle, enabled: !!continueIssueId, onClick: onJumpToIssue },
             { label: "Resume Entity", icon: BookMarked, enabled: !!continueEntityId, onClick: onJumpToEntity },
             { label: "Resume Scene", icon: BookOpen, enabled: !!continueSceneId, onClick: onJumpToScene }
           ].map((item) => (
@@ -153,45 +192,56 @@ export function DashboardView({
         </div>
       </article>
 
-      {/* Pipeline timeline */}
       <article className="rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 mb-3 text-sm font-semibold">Pipeline Timeline</h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="m-0 text-sm font-semibold">Pipeline Timeline</h3>
+          <button
+            type="button"
+            className="rounded-sm border border-border bg-surface-2 px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-white cursor-pointer dark:bg-surface-1"
+            onClick={() => setShowRawTimeline((current) => !current)}
+          >
+            {showRawTimeline ? "Show grouped" : "Show raw events"}
+          </button>
+        </div>
         {processingState.length === 0 ? (
           <EmptyState
             icon={LayoutDashboard}
             title="No Pipeline Rows"
             message="Ingest at least one document to populate deterministic scene/style/extraction stages."
           />
+        ) : showRawTimeline ? (
+          <div className="flex flex-col gap-2">
+            {processingState.map((row) => (
+              <div key={`${row.document_id}-${row.stage}-${row.updated_at}`} className="rounded-sm border border-border bg-surface-2/50 p-2.5 dark:bg-surface-1/50">
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="text-sm">{row.stage}</strong>
+                  <StatusBadge label={row.status} status={row.status} />
+                </div>
+                <div className="mt-1 truncate font-mono text-xs text-text-muted">{row.document_path}</div>
+                {row.error ? <div className="mt-1 text-xs text-danger">Error: {row.error}</div> : null}
+                <div className="mt-1 text-xs text-text-muted">Updated {new Date(row.updated_at).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {processingState.map((row, i) => (
-              <div key={`${row.document_id}-${row.stage}`} className="flex items-start gap-3">
-                {/* Timeline dot + line */}
-                <div className="flex flex-col items-center pt-1.5">
-                  <div className={`h-2.5 w-2.5 rounded-full border-2 ${
-                    row.status === "error" ? "border-danger bg-danger-soft" :
-                    row.status === "busy" ? "border-warn bg-warn-soft" :
-                    "border-ok bg-ok-soft"
-                  }`} />
-                  {i < processingState.length - 1 ? <div className="mt-1 h-8 w-px bg-border" /> : null}
+            {groupedTimeline.map((group) => (
+              <div key={group.stage} className="rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="text-sm">{group.stage}</strong>
+                  <StatusBadge label={group.latestStatus} status={group.latestStatus} />
                 </div>
-                {/* Content */}
-                <div className="flex-1 rounded-sm border border-border bg-surface-2/50 p-2.5 dark:bg-surface-1/50">
-                  <div className="flex items-center justify-between gap-2">
-                    <strong className="text-sm">{row.stage}</strong>
-                    <StatusBadge label={row.status} status={row.status} />
-                  </div>
-                  <div className="mt-1 truncate font-mono text-xs text-text-muted">{row.document_path}</div>
-                  {row.error ? <div className="mt-1 text-xs text-danger">Error: {row.error}</div> : null}
-                  <div className="mt-1 text-xs text-text-muted">Updated {new Date(row.updated_at).toLocaleString()}</div>
+                <div className="mt-1 text-xs text-text-muted">
+                  {group.count} updates · last seen {new Date(group.latestUpdatedAt).toLocaleString()}
                 </div>
+                <div className="mt-1 truncate font-mono text-xs text-text-muted">{group.latestPath}</div>
+                {group.latestError ? <div className="mt-1 text-xs text-danger">Error: {group.latestError}</div> : null}
               </div>
             ))}
           </div>
         )}
       </article>
 
-      {/* Event log */}
       <article className="rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
         <h3 className="m-0 mb-3 text-sm font-semibold">Recent Event Log</h3>
         {!history || history.events.length === 0 ? (
@@ -204,16 +254,14 @@ export function DashboardView({
                 <div
                   key={event.id}
                   className={`flex items-center justify-between gap-3 rounded-sm p-2 text-sm ${
-                    event.level === "error" ? "bg-danger-soft/50" :
-                    event.level === "warn" ? "bg-warn-soft/50" :
-                    "bg-surface-1/50"
+                    event.level === "error" ? "bg-danger-soft/50" : event.level === "warn" ? "bg-warn-soft/50" : "bg-surface-1/50"
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
                     <EventIcon size={14} className="shrink-0" />
                     <span className="truncate font-mono text-xs">{event.event_type}</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span className="text-xs text-text-muted">{new Date(event.ts).toLocaleString()}</span>
                     <StatusBadge label={event.level} status={event.level} />
                   </div>

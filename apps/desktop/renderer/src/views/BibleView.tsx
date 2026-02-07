@@ -21,7 +21,11 @@ type BibleViewProps = {
   onFiltersChange: (next: EntityFilters) => void;
   onRefresh: () => void;
   onSelectEntity: (entityId: string) => void;
-  onOpenEvidence: (title: string, detail: { evidence: EntityDetail["claims"][number]["evidence"] }) => void;
+  onOpenEvidence: (
+    title: string,
+    detail: { evidence: EntityDetail["claims"][number]["evidence"] },
+    context: { sourceId: string }
+  ) => void;
   onRequestConfirmClaim: (claim: {
     field: string;
     valueJson: string;
@@ -189,7 +193,9 @@ export function BibleView({
                             <button
                               className="inline-flex items-center gap-1 rounded-sm border border-border bg-transparent px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-surface-1 cursor-pointer disabled:opacity-50"
                               type="button"
-                              onClick={() => onOpenEvidence(`${group.field} claim`, claim)}
+                              onClick={() =>
+                                onOpenEvidence(`${group.field} claim`, claim, { sourceId: claim.claim.id })
+                              }
                               disabled={claim.evidence.length === 0}
                             >
                               <Quote size={12} />

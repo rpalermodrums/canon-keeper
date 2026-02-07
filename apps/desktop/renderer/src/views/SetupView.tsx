@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import { CheckCircle, FolderOpen, FolderSearch, RefreshCw } from "lucide-react";
-import type { SystemHealthCheck } from "../api/ipc";
+import type { ProjectDiagnostics } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
 import { StatusBadge } from "../components/StatusBadge";
@@ -9,7 +9,9 @@ type SetupViewProps = {
   busy: boolean;
   rootPath: string;
   docPath: string;
-  healthCheck: SystemHealthCheck | null;
+  healthCheck: ProjectDiagnostics | null;
+  hasProject: boolean;
+  hasDocuments: boolean;
   onRootPathChange: (value: string) => void;
   onDocPathChange: (value: string) => void;
   onPickProjectRoot: () => void;
@@ -20,10 +22,24 @@ type SetupViewProps = {
   onRunPreflight: () => void;
 };
 
+type StepState = "todo" | "active" | "done";
+
+function stepState(index: number, hasProject: boolean, hasDocuments: boolean, hasDiagnostics: boolean): StepState {
+  if (index === 0) {
+    return hasProject ? "done" : "active";
+  }
+  if (index === 1) {
+    if (!hasProject) return "todo";
+    return hasDocuments ? "done" : "active";
+  }
+  if (!hasProject || !hasDocuments) return "todo";
+  return hasDiagnostics ? "done" : "active";
+}
+
 const steps = [
-  { num: 1, label: "Choose Project" },
-  { num: 2, label: "Add Document" },
-  { num: 3, label: "Diagnostics" }
+  { num: 1, label: "Open Project Folder" },
+  { num: 2, label: "Add Manuscript Files" },
+  { num: 3, label: "Run Diagnostics" }
 ] as const;
 
 export function SetupView({
@@ -31,6 +47,8 @@ export function SetupView({
   rootPath,
   docPath,
   healthCheck,
+  hasProject,
+  hasDocuments,
   onRootPathChange,
   onDocPathChange,
   onPickProjectRoot,
@@ -40,37 +58,50 @@ export function SetupView({
   onAddDocument,
   onRunPreflight
 }: SetupViewProps): JSX.Element {
+  const diagnosticsReady = Boolean(healthCheck && healthCheck.details.length === 0);
+  const allowAddDocument = hasProject;
+  const allowDiagnostics = hasProject && hasDocuments;
+
   return (
     <section className="flex flex-col gap-4">
       <header>
         <h2 className="m-0 font-display text-2xl font-bold">Setup Wizard</h2>
         <p className="mt-1 text-sm text-text-muted">
-          Step 1: Open project. Step 2: Add manuscript files. Step 3: Run diagnostics before deeper work.
+          Complete these steps in order to prevent configuration errors and speed up first ingestion.
         </p>
       </header>
 
-      {/* Stepper */}
-      <div className="flex items-center justify-center gap-0 py-2">
-        {steps.map((step, i) => (
-          <div key={step.num} className="flex items-center">
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-accent bg-accent-soft text-xs font-bold text-accent-strong">
-                {step.num}
+      <div className="rounded-md border border-border bg-surface-2/70 p-3 dark:bg-surface-1/50">
+        <div className="flex flex-wrap items-center justify-center gap-2 py-1">
+          {steps.map((step, index) => {
+            const state = stepState(index, hasProject, hasDocuments, diagnosticsReady);
+            return (
+              <div key={step.num} className="flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-full border border-border bg-surface-1 px-3 py-1 dark:bg-surface-2">
+                  <span
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                      state === "done"
+                        ? "bg-ok-soft text-ok"
+                        : state === "active"
+                          ? "bg-accent-soft text-accent"
+                          : "bg-surface-2 text-text-muted dark:bg-surface-1"
+                    }`}
+                  >
+                    {step.num}
+                  </span>
+                  <span className="text-xs font-medium">{step.label}</span>
+                </div>
+                {index < steps.length - 1 ? <div className="h-px w-5 bg-border" /> : null}
               </div>
-              <span className="text-xs text-text-muted">{step.label}</span>
-            </div>
-            {i < steps.length - 1 ? (
-              <div className="mx-3 h-0.5 w-12 bg-border" />
-            ) : null}
-          </div>
-        ))}
+            );
+          })}
+        </div>
       </div>
 
-      {/* Step 1 */}
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 text-sm font-semibold">1. Choose Project Path</h3>
+        <h3 className="m-0 text-sm font-semibold">1. Project Folder</h3>
         <label className="flex flex-col gap-1 text-sm text-text-secondary">
-          Project root
+          Folder path
           <div className="flex gap-2">
             <input
               className="flex-1"
@@ -99,9 +130,14 @@ export function SetupView({
         </button>
       </article>
 
-      {/* Step 2 */}
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 text-sm font-semibold">2. Add Document</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="m-0 text-sm font-semibold">2. Manuscript Files</h3>
+          {allowAddDocument ? <StatusBadge label="ready" status="ok" /> : <StatusBadge label="blocked" status="warn" />}
+        </div>
+        {!allowAddDocument ? (
+          <p className="text-sm text-text-muted">Open a project folder first to enable manuscript ingestion.</p>
+        ) : null}
         <label className="flex flex-col gap-1 text-sm text-text-secondary">
           Manuscript path (.md, .txt, .docx)
           <div className="flex gap-2">
@@ -110,12 +146,13 @@ export function SetupView({
               value={docPath}
               onChange={(e) => onDocPathChange(e.target.value)}
               placeholder="/Users/.../chapter-01.md"
+              disabled={!allowAddDocument}
             />
             <button
               className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm transition-colors hover:enabled:bg-white cursor-pointer disabled:opacity-50 dark:bg-surface-1"
               type="button"
               onClick={onPickDocument}
-              disabled={busy}
+              disabled={busy || !allowAddDocument}
             >
               <FolderSearch size={16} />
               Browse
@@ -127,39 +164,44 @@ export function SetupView({
             className="rounded-sm border border-accent bg-accent px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-accent-strong cursor-pointer disabled:opacity-50"
             type="button"
             onClick={onAddDocument}
-            disabled={busy || !docPath.trim()}
+            disabled={busy || !allowAddDocument || !docPath.trim()}
           >
-            {busy ? <Spinner size="sm" /> : "Add Document"}
+            {busy ? <Spinner size="sm" /> : "Add Manuscript"}
           </button>
           <button
             className="rounded-sm border border-border bg-surface-2 px-3 py-2 text-sm transition-colors hover:enabled:bg-white cursor-pointer disabled:opacity-50 dark:bg-surface-1"
             type="button"
             onClick={onUseFixture}
-            disabled={busy}
+            disabled={busy || !allowAddDocument}
           >
             Use Fixture
           </button>
         </div>
       </article>
 
-      {/* Step 3 */}
       <article className="flex flex-col gap-3 rounded-md border border-border bg-white/75 p-4 shadow-sm dark:bg-surface-2/60">
-        <h3 className="m-0 text-sm font-semibold">3. Environment Diagnostics</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="m-0 text-sm font-semibold">3. Environment Diagnostics</h3>
+          {allowDiagnostics ? <StatusBadge label="ready" status="ok" /> : <StatusBadge label="blocked" status="warn" />}
+        </div>
+        {!allowDiagnostics ? (
+          <p className="text-sm text-text-muted">Add at least one manuscript file before running diagnostics.</p>
+        ) : null}
         <button
           className="inline-flex items-center gap-1.5 self-start rounded-sm border border-accent bg-accent px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-accent-strong cursor-pointer disabled:opacity-50"
           type="button"
           onClick={onRunPreflight}
-          disabled={busy}
+          disabled={busy || !allowDiagnostics}
         >
           <RefreshCw size={16} />
-          {busy ? "Running..." : "Retry Diagnostics"}
+          {busy ? "Running..." : "Run Diagnostics"}
         </button>
 
         {!healthCheck ? (
           <EmptyState
             icon={FolderOpen}
             title="No Diagnostics Yet"
-            message="Run diagnostics to verify IPC, worker reachability, sqlite native module, and write permissions."
+            message="Diagnostics verify IPC, worker reachability, sqlite native module, and write permissions."
           />
         ) : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -170,17 +212,16 @@ export function SetupView({
                 <StatusBadge label={healthCheck[key]} status={healthCheck[key]} />
               </div>
             ))}
-            {healthCheck.details.length > 0 ? (
+            {healthCheck.recommendations.length > 0 ? (
               <div className="col-span-full rounded-sm border border-border bg-surface-2/50 p-3 dark:bg-surface-1/50">
-                <h4 className="m-0 mb-2 text-sm font-semibold">Recovery Guidance</h4>
+                <h4 className="m-0 mb-2 text-sm font-semibold">Recommended Actions</h4>
                 <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-                  {healthCheck.details.map((detail) => (
-                    <li key={detail} className="text-sm text-text-secondary">{detail}</li>
+                  {healthCheck.recommendations.map((detail) => (
+                    <li key={detail} className="text-sm text-text-secondary">
+                      {detail}
+                    </li>
                   ))}
                 </ul>
-                {healthCheck.sqlite === "missing_native" ? (
-                  <div className="mt-2 font-mono text-xs text-text-muted">Run: bun install (or npm rebuild better-sqlite3)</div>
-                ) : null}
               </div>
             ) : null}
           </div>

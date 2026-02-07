@@ -6,8 +6,8 @@ import {
   createOrOpenProject,
   dismissIssue,
   getBundledFixturePath,
+  getProjectDiagnostics,
   getEntity,
-  getHealthCheck,
   getProcessingState,
   getProjectHistory,
   getScene,
@@ -31,12 +31,12 @@ import {
   type ExportResult,
   type IngestResult,
   type IssueSummary,
+  type ProjectDiagnostics,
   type ProjectSummary,
   type SceneDetail,
   type SceneSummary,
   type SearchQueryResponse,
   type StyleReport,
-  type SystemHealthCheck,
   type UserFacingError,
   type WorkerStatus
 } from "../api/ipc";
@@ -64,6 +64,14 @@ export type AppSection =
   | "bible"
   | "export"
   | "settings";
+
+export type ActiveEvidenceContext = {
+  source: "issue" | "scene" | "claim" | "style";
+  sourceId: string;
+  evidenceId: string;
+} | null;
+
+export type LayoutMode = "mobile" | "tablet" | "desktop";
 
 export const APP_SECTIONS: Array<{
   id: AppSection;
@@ -147,6 +155,16 @@ function isEditableElement(target: EventTarget | null): boolean {
   return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
 }
 
+function computeLayoutMode(width: number): LayoutMode {
+  if (width < 768) {
+    return "mobile";
+  }
+  if (width < 1200) {
+    return "tablet";
+  }
+  return "desktop";
+}
+
 export function useCanonkeeperApp() {
   const [activeSection, setActiveSection] = useState<AppSection>(() =>
     readStorage<AppSection>("canonkeeper.activeSection", "dashboard")
@@ -157,7 +175,7 @@ export function useCanonkeeperApp() {
   const [exportKind, setExportKind] = useState<"md" | "json">("md");
 
   const [status, setStatus] = useState<WorkerStatus | null>(null);
-  const [healthCheck, setHealthCheck] = useState<SystemHealthCheck | null>(null);
+  const [healthCheck, setHealthCheck] = useState<ProjectDiagnostics | null>(null);
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [processingState, setProcessingState] = useState<
     Array<{
@@ -230,20 +248,30 @@ export function useCanonkeeperApp() {
     })
   );
 
+  const [activeEvidenceContext, setActiveEvidenceContext] = useState<ActiveEvidenceContext>(null);
+  const [evidencePinned, setEvidencePinned] = useState(false);
   const [evidenceDrawer, setEvidenceDrawer] = useState<{
     open: boolean;
     title: string;
     evidence: EvidenceItem[];
+    source: "issue" | "scene" | "claim" | "style";
+    sourceId: string;
   }>({
     open: false,
     title: "",
-    evidence: []
+    evidence: [],
+    source: "style",
+    sourceId: ""
   });
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [error, setError] = useState<UserFacingError | null>(null);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() =>
+    typeof window === "undefined" ? "desktop" : computeLayoutMode(window.innerWidth)
+  );
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsedRaw] = useState(() =>
     readStorage<boolean>("canonkeeper.sidebarCollapsed", false)
   );
@@ -370,7 +398,22 @@ export function useCanonkeeperApp() {
 
   useEffect(() => {
     writeStorage("canonkeeper.activeSection", activeSection);
-  }, [activeSection]);
+    setMobileNavOpen(false);
+    if (!evidencePinned) {
+      setEvidenceDrawer((current) => ({ ...current, open: false }));
+      setActiveEvidenceContext(null);
+    }
+  }, [activeSection, evidencePinned]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setLayoutMode(computeLayoutMode(window.innerWidth));
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
 
   useEffect(() => {
     writeStorage("canonkeeper.issueFilters", issueFilters);
@@ -448,7 +491,7 @@ export function useCanonkeeperApp() {
     beginAction(action);
     clearError();
     try {
-      const result = await getHealthCheck();
+      const result = await getProjectDiagnostics();
       setHealthCheck(result);
       if (result.details.length === 0) {
         pushToast({ message: "Diagnostics passed.", tone: "success" });
@@ -471,7 +514,6 @@ export function useCanonkeeperApp() {
     try {
       const created = await createOrOpenProject({ rootPath: rootPath.trim() });
       setProject(created);
-      setActiveSection("dashboard");
       await refreshAll();
       pushToast({ message: `Project ready: ${created.name}`, tone: "success" });
     } catch (err) {
@@ -525,7 +567,6 @@ export function useCanonkeeperApp() {
       setLastIngest(result);
       await refreshAll();
       pushToast({ message: "Document ingested.", tone: "success" });
-      setActiveSection("dashboard");
     } catch (err) {
       setAppError("INGEST_FAILED", err);
     } finally {
@@ -708,9 +749,35 @@ export function useCanonkeeperApp() {
     }
   }, [beginAction, clearError, endAction, exportDir, exportKind, pushToast, setAppError]);
 
-  const openEvidence = useCallback((title: string, evidence: EvidenceItem[]) => {
-    setEvidenceDrawer({ open: true, title, evidence });
+  const closeEvidence = useCallback(() => {
+    setEvidenceDrawer((drawer) => ({ ...drawer, open: false }));
+    setActiveEvidenceContext(null);
   }, []);
+
+  const openEvidence = useCallback(
+    (
+      title: string,
+      evidence: EvidenceItem[],
+      context: { source: "issue" | "scene" | "claim" | "style"; sourceId: string }
+    ) => {
+      setEvidenceDrawer({ open: true, title, evidence, source: context.source, sourceId: context.sourceId });
+      const first = evidence[0];
+      setActiveEvidenceContext(
+        first
+          ? {
+              source: context.source,
+              sourceId: context.sourceId,
+              evidenceId: `${first.chunkId}:${first.quoteStart}:${first.quoteEnd}`
+            }
+          : {
+              source: context.source,
+              sourceId: context.sourceId,
+              evidenceId: `${context.sourceId}:0`
+            }
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -722,7 +789,7 @@ export function useCanonkeeperApp() {
 
       if (event.key === "Escape") {
         setCommandPaletteOpen(false);
-        setEvidenceDrawer((drawer) => ({ ...drawer, open: false }));
+        closeEvidence();
         setDismissIssueDraft(null);
         setConfirmClaimDraft(null);
         return;
@@ -783,7 +850,7 @@ export function useCanonkeeperApp() {
           return;
         }
         if (event.key === "Enter") {
-          openEvidence(target.title, target.evidence);
+          openEvidence(target.title, target.evidence, { source: "issue", sourceId: target.id });
         } else {
           onSelectIssue(target.id);
         }
@@ -816,6 +883,7 @@ export function useCanonkeeperApp() {
     };
   }, [
     activeSection,
+    closeEvidence,
     entities,
     issues,
     onSelectEntity,
@@ -832,39 +900,61 @@ export function useCanonkeeperApp() {
     if (!status) {
       return "Disconnected";
     }
-    const workerState = status.workerState && status.workerState !== "ready" ? ` / ${status.workerState}` : "";
-    const job = status.lastJob ? ` (${status.lastJob})` : "";
-    return `${status.state}${job}${workerState}`;
+    const phaseLabel = status.phase === "idle" ? "Idle" : status.phase;
+    const details = [phaseLabel];
+    if (status.activeJobLabel) {
+      details.push(status.activeJobLabel);
+    }
+    if (status.workerState && status.workerState !== "ready") {
+      details.push(status.workerState);
+    }
+    return details.join(" · ");
   }, [status]);
 
   const onOpenEvidenceFromScene = useCallback((title: string, detail: SceneDetail) => {
-    openEvidence(title, detail.evidence);
+    openEvidence(title, detail.evidence, { source: "scene", sourceId: detail.scene.id });
   }, [openEvidence]);
 
   const onOpenEvidenceFromIssue = useCallback((title: string, issue: IssueSummary) => {
-    openEvidence(title, issue.evidence);
+    openEvidence(title, issue.evidence, { source: "issue", sourceId: issue.id });
   }, [openEvidence]);
 
   const onOpenEvidenceFromClaim = useCallback(
-    (title: string, detail: { evidence: EntityDetail["claims"][number]["evidence"] }) => {
-      openEvidence(title, detail.evidence);
+    (
+      title: string,
+      detail: { evidence: EntityDetail["claims"][number]["evidence"] },
+      context: { sourceId: string }
+    ) => {
+      openEvidence(title, detail.evidence, { source: "claim", sourceId: context.sourceId });
     },
     [openEvidence]
   );
 
   const onCommandSelect = useCallback(
     (id: string) => {
-      if (id === "jump.issue" && continueContext.issueId) {
+      if (id === "jump.issue") {
+        if (!continueContext.issueId) {
+          pushToast({ message: "No recent issue to resume.", tone: "info" });
+          return;
+        }
         setActiveSection("issues");
         setSelectedIssueId(continueContext.issueId);
         return;
       }
-      if (id === "jump.entity" && continueContext.entityId) {
+      if (id === "jump.entity") {
+        if (!continueContext.entityId) {
+          pushToast({ message: "No recent entity to resume.", tone: "info" });
+          return;
+        }
         setActiveSection("bible");
         void onSelectEntity(continueContext.entityId);
         return;
       }
-      if (id === "jump.scene" && continueContext.sceneId) {
+      if (id === "jump.scene") {
+        if (!continueContext.sceneId) {
+          pushToast({ message: "No recent scene to resume.", tone: "info" });
+          return;
+        }
         setActiveSection("scenes");
         void onSelectScene(continueContext.sceneId);
         return;
@@ -877,7 +967,15 @@ export function useCanonkeeperApp() {
         setActiveSection(id as AppSection);
       }
     },
-    [continueContext.entityId, continueContext.issueId, continueContext.sceneId, onSelectEntity, onSelectScene, runDiagnostics]
+    [
+      continueContext.entityId,
+      continueContext.issueId,
+      continueContext.sceneId,
+      onSelectEntity,
+      onSelectScene,
+      pushToast,
+      runDiagnostics
+    ]
   );
 
   return {
@@ -927,8 +1025,15 @@ export function useCanonkeeperApp() {
     dismissToast,
     evidenceDrawer,
     setEvidenceDrawer,
+    activeEvidenceContext,
+    evidencePinned,
+    setEvidencePinned,
+    closeEvidence,
     commandPaletteOpen,
     setCommandPaletteOpen,
+    layoutMode,
+    mobileNavOpen,
+    setMobileNavOpen,
     sidebarCollapsed,
     setSidebarCollapsed: (collapsed: boolean) => {
       setSidebarCollapsedRaw(collapsed);

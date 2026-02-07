@@ -7,6 +7,8 @@ type CommandPaletteItem = {
   subtitle: string;
   icon?: ComponentType<{ size?: number | string; className?: string }>;
   category?: string;
+  enabled?: boolean;
+  disabledReason?: string;
 };
 
 type CommandPaletteProps = {
@@ -35,7 +37,10 @@ export function CommandPalette({ open, items, onSelect, onClose }: CommandPalett
   const filtered = useMemo(() => {
     if (!query.trim()) return items;
     return items.filter(
-      (item) => fuzzyMatch(item.label, query) || fuzzyMatch(item.subtitle, query)
+      (item) =>
+        fuzzyMatch(item.label, query) ||
+        fuzzyMatch(item.subtitle, query) ||
+        (item.disabledReason ? fuzzyMatch(item.disabledReason, query) : false)
     );
   }, [items, query]);
 
@@ -52,7 +57,11 @@ export function CommandPalette({ open, items, onSelect, onClose }: CommandPalett
   }, [open]);
 
   const handleSelect = useCallback(
-    (id: string) => {
+    (item: CommandPaletteItem) => {
+      if (item.enabled === false) {
+        return;
+      }
+      const { id } = item;
       onSelect(id);
       onClose();
     },
@@ -70,7 +79,7 @@ export function CommandPalette({ open, items, onSelect, onClose }: CommandPalett
         setActiveIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter" && filtered[activeIndex]) {
         e.preventDefault();
-        handleSelect(filtered[activeIndex].id);
+        handleSelect(filtered[activeIndex]);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -119,11 +128,14 @@ export function CommandPalette({ open, items, onSelect, onClose }: CommandPalett
                     className={`flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left transition-colors cursor-pointer ${
                       i === activeIndex
                         ? "bg-accent-soft text-accent-strong dark:text-accent"
-                        : "bg-transparent text-text-primary hover:bg-surface-1 dark:hover:bg-surface-2"
+                        : item.enabled === false
+                          ? "bg-transparent text-text-muted"
+                          : "bg-transparent text-text-primary hover:bg-surface-1 dark:hover:bg-surface-2"
                     }`}
                     type="button"
-                    onClick={() => handleSelect(item.id)}
+                    onClick={() => handleSelect(item)}
                     onMouseEnter={() => setActiveIndex(i)}
+                    disabled={item.enabled === false}
                   >
                     {Icon ? (
                       <Icon size={18} className="shrink-0 text-text-muted" />
@@ -133,7 +145,15 @@ export function CommandPalette({ open, items, onSelect, onClose }: CommandPalett
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{item.label}</div>
                       <div className="truncate text-xs text-text-muted">{item.subtitle}</div>
+                      {item.enabled === false && item.disabledReason ? (
+                        <div className="truncate text-xs text-warn">{item.disabledReason}</div>
+                      ) : null}
                     </div>
+                    {item.category ? (
+                      <span className="shrink-0 rounded-full border border-border bg-surface-1 px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-muted dark:bg-surface-2">
+                        {item.category}
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               );

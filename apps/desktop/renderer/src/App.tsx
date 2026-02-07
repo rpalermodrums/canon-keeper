@@ -1,14 +1,15 @@
 import type { JSX } from "react";
-import { RefreshCw, Play } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 import { AsyncToast } from "./components/AsyncToast";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { InlineError } from "./components/InlineError";
 import { Sidebar } from "./components/Sidebar";
+import { StatusBadge } from "./components/StatusBadge";
 import { TopBar } from "./components/TopBar";
 import { useTheme } from "./context/ThemeContext";
-import { APP_SECTIONS, useCanonkeeperApp } from "./state/useCanonkeeperApp";
+import { APP_SECTIONS, type AppSection, useCanonkeeperApp } from "./state/useCanonkeeperApp";
 import { BibleView } from "./views/BibleView";
 import { DashboardView } from "./views/DashboardView";
 import { ExportView } from "./views/ExportView";
@@ -19,39 +20,140 @@ import { SettingsView } from "./views/SettingsView";
 import { SetupView } from "./views/SetupView";
 import { StyleView } from "./views/StyleView";
 
+const mobileSections: AppSection[] = ["dashboard", "setup", "search", "scenes", "issues", "bible"];
+
+function formatLastSuccess(ts: string | null | undefined): string {
+  if (!ts) {
+    return "Never";
+  }
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) {
+    return ts;
+  }
+  return date.toLocaleString();
+}
+
+function sourceLabel(source: string, sourceId: string): string {
+  const sourceName =
+    source === "issue"
+      ? "Continuity Question"
+      : source === "scene"
+        ? "Scene"
+        : source === "claim"
+          ? "Claim"
+          : "Style Signal";
+  return sourceId ? `${sourceName} · ${sourceId}` : sourceName;
+}
+
 export function App(): JSX.Element {
   const app = useCanonkeeperApp();
   const { theme, setTheme } = useTheme();
+  const isMobile = app.layoutMode === "mobile";
 
   const commandItems = [
-    ...APP_SECTIONS.map((s) => ({ ...s, icon: s.icon })),
-    { id: "run.diagnostics", label: "Run Diagnostics", subtitle: "Check IPC, worker, sqlite, and writable state", icon: RefreshCw },
-    { id: "jump.issue", label: "Resume Last Issue", subtitle: "Return to last selected issue", icon: Play },
-    { id: "jump.entity", label: "Resume Last Entity", subtitle: "Return to last selected entity", icon: Play },
-    { id: "jump.scene", label: "Resume Last Scene", subtitle: "Return to last selected scene", icon: Play }
+    ...APP_SECTIONS.map((section) => ({
+      id: section.id,
+      label: section.label,
+      subtitle: section.subtitle,
+      icon: section.icon,
+      category: "Navigate",
+      enabled: true
+    })),
+    {
+      id: "run.diagnostics",
+      label: "Run Diagnostics",
+      subtitle: "Check IPC, worker, sqlite, and writable state",
+      icon: RefreshCw,
+      category: "Project",
+      enabled: true
+    },
+    {
+      id: "jump.issue",
+      label: "Resume Last Issue",
+      subtitle: "Return to last selected issue",
+      icon: Play,
+      category: "Resume",
+      enabled: Boolean(app.continueContext.issueId),
+      disabledReason: "No recent issue yet"
+    },
+    {
+      id: "jump.entity",
+      label: "Resume Last Entity",
+      subtitle: "Return to last selected entity",
+      icon: Play,
+      category: "Resume",
+      enabled: Boolean(app.continueContext.entityId),
+      disabledReason: "No recent entity yet"
+    },
+    {
+      id: "jump.scene",
+      label: "Resume Last Scene",
+      subtitle: "Return to last selected scene",
+      icon: Play,
+      category: "Resume",
+      enabled: Boolean(app.continueContext.sceneId),
+      disabledReason: "No recent scene yet"
+    }
   ];
+
+  const hasProject = Boolean(app.project);
+  const hasDocuments = Boolean(app.lastIngest) || app.processingState.length > 0;
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar
-        activeSection={app.activeSection}
-        onSectionChange={app.setActiveSection}
-        collapsed={app.sidebarCollapsed}
-        onCollapsedChange={app.setSidebarCollapsed}
-        theme={theme}
-        onThemeChange={setTheme}
-      />
+      {!isMobile ? (
+        <Sidebar
+          activeSection={app.activeSection}
+          onSectionChange={app.setActiveSection}
+          collapsed={app.layoutMode === "tablet" ? true : app.sidebarCollapsed}
+          onCollapsedChange={app.setSidebarCollapsed}
+        />
+      ) : null}
 
-      <div className="flex flex-1 flex-col min-w-0">
+      {isMobile && app.mobileNavOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onClick={() => app.setMobileNavOpen(false)}>
+          <div className="h-full w-[280px] border-r border-border bg-surface-1" onClick={(event) => event.stopPropagation()}>
+            <Sidebar
+              activeSection={app.activeSection}
+              onSectionChange={app.setActiveSection}
+              collapsed={false}
+              onCollapsedChange={() => {
+                // no-op in mobile drawer
+              }}
+              showCollapseControl={false}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
           activeSection={app.activeSection}
           projectName={app.project?.name ?? null}
           status={app.status}
           statusLabel={app.statusLabel}
+          theme={theme}
+          onThemeChange={setTheme}
+          layoutMode={app.layoutMode}
+          onToggleMobileNav={() => app.setMobileNavOpen((open) => !open)}
           onOpenCommandPalette={() => app.setCommandPaletteOpen(true)}
         />
 
-        <main className="flex flex-1 flex-col gap-4 p-6">
+        <div className="border-b border-border bg-surface-2/60 px-5 py-2 text-xs text-text-secondary">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge label={`phase:${app.status?.phase ?? "idle"}`} status={app.status?.phase ?? "down"} />
+            <span>queue:{app.status?.queueDepth ?? 0}</span>
+            {app.status?.activeJobLabel ? <span>job:{app.status.activeJobLabel}</span> : null}
+            <span>last-success:{formatLastSuccess(app.status?.lastSuccessfulRunAt)}</span>
+            {app.status?.lastError ? (
+              <span className="rounded-sm border border-danger/25 bg-danger-soft px-2 py-0.5 text-danger">
+                {app.status.lastError.subsystem}: {app.status.lastError.message}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <main className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"}`}>
           {app.error ? <InlineError error={app.error} onDismiss={app.clearError} onAction={app.onRunDiagnostics} /> : null}
 
           <div className="animate-fade-in">
@@ -77,6 +179,8 @@ export function App(): JSX.Element {
                 rootPath={app.rootPath}
                 docPath={app.docPath}
                 healthCheck={app.healthCheck}
+                hasProject={hasProject}
+                hasDocuments={hasDocuments}
                 onRootPathChange={app.setRootPath}
                 onDocPathChange={app.setDocPath}
                 onPickProjectRoot={app.onPickProjectRoot}
@@ -138,7 +242,12 @@ export function App(): JSX.Element {
                 styleIssues={app.styleIssues}
                 onRefresh={() => void app.refreshStyle()}
                 onOpenIssueEvidence={(title, issue) => app.onOpenEvidenceFromIssue(title, issue)}
-                onOpenMetricEvidence={app.openEvidence}
+                onOpenMetricEvidence={(title, evidence) =>
+                  app.openEvidence(title, evidence, {
+                    source: "style",
+                    sourceId: title.toLowerCase().replace(/\s+/g, "-")
+                  })
+                }
               />
             ) : null}
 
@@ -152,7 +261,7 @@ export function App(): JSX.Element {
                 onFiltersChange={app.setEntityFilters}
                 onRefresh={() => void app.refreshEntities()}
                 onSelectEntity={(entityId) => void app.onSelectEntity(entityId)}
-                onOpenEvidence={(title, detail) => app.onOpenEvidenceFromClaim(title, detail)}
+                onOpenEvidence={(title, detail, context) => app.onOpenEvidenceFromClaim(title, detail, context)}
                 onRequestConfirmClaim={app.setConfirmClaimDraft}
               />
             ) : null}
@@ -185,11 +294,51 @@ export function App(): JSX.Element {
         </main>
       </div>
 
+      {isMobile ? (
+        <nav className="fixed right-0 bottom-0 left-0 z-40 border-t border-border bg-surface-2/95 px-2 py-2 backdrop-blur md:hidden">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {mobileSections.map((sectionId) => {
+              const section = APP_SECTIONS.find((item) => item.id === sectionId);
+              if (!section) {
+                return null;
+              }
+              const Icon = section.icon;
+              const active = app.activeSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  className={`inline-flex min-w-[78px] flex-col items-center gap-1 rounded-sm px-2 py-1 text-[11px] cursor-pointer ${
+                    active ? "bg-accent-soft text-accent-strong dark:text-accent" : "text-text-muted"
+                  }`}
+                  onClick={() => app.setActiveSection(section.id)}
+                >
+                  <Icon size={14} />
+                  <span>{section.label}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              className="inline-flex min-w-[78px] flex-col items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-text-muted cursor-pointer"
+              onClick={() => app.setCommandPaletteOpen(true)}
+            >
+              <Play size={14} />
+              <span>More</span>
+            </button>
+          </div>
+        </nav>
+      ) : null}
+
       <EvidenceDrawer
         open={app.evidenceDrawer.open}
         title={app.evidenceDrawer.title}
+        sourceLabel={sourceLabel(app.evidenceDrawer.source, app.evidenceDrawer.sourceId)}
         evidence={app.evidenceDrawer.evidence}
-        onClose={() => app.setEvidenceDrawer((state) => ({ ...state, open: false }))}
+        layoutMode={app.layoutMode}
+        pinned={app.evidencePinned}
+        onTogglePin={() => app.setEvidencePinned((current) => !current)}
+        onClose={app.closeEvidence}
       />
 
       <CommandPalette
