@@ -215,6 +215,16 @@ function wait(ms: number): Promise<void> {
   });
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message.length > 0) {
+      return message;
+    }
+  }
+  return "Unknown error";
+}
+
 export async function ping(): Promise<PingResponse> {
   if (!window.canonkeeper) {
     return { ok: false };
@@ -294,7 +304,17 @@ export async function getHealthCheck(): Promise<SystemHealthCheck> {
       ]
     };
   }
-  return window.canonkeeper.system.healthCheck();
+  try {
+    return await window.canonkeeper.system.healthCheck();
+  } catch (error) {
+    return {
+      ipc: "ok",
+      worker: "down",
+      sqlite: "error",
+      writable: "error",
+      details: [`Health check failed: ${errorMessage(error)}`]
+    };
+  }
 }
 
 export async function getProjectDiagnostics(): Promise<ProjectDiagnostics> {
@@ -310,7 +330,21 @@ export async function getProjectDiagnostics(): Promise<ProjectDiagnostics> {
   }
 
   if (window.canonkeeper.project && typeof window.canonkeeper.project.getDiagnostics === "function") {
-    return window.canonkeeper.project.getDiagnostics();
+    try {
+      return await window.canonkeeper.project.getDiagnostics();
+    } catch (error) {
+      return {
+        ipc: "ok",
+        worker: "down",
+        sqlite: "error",
+        writable: "error",
+        details: [`Project diagnostics failed: ${errorMessage(error)}`],
+        recommendations: [
+          "Try reopening the project.",
+          "If this keeps happening, run Health Check in Settings and review recent worker events."
+        ]
+      };
+    }
   }
 
   const health = await getHealthCheck();

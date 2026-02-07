@@ -1,7 +1,7 @@
-import Ajv from "ajv";
+import Ajv2020 from "ajv/dist/2020";
 import type { LLMProvider } from "./provider";
 
-const ajv = new Ajv({ allErrors: true, strict: false });
+const ajv = new Ajv2020({ allErrors: true, strict: false });
 
 export function validateJson(schema: object, data: unknown): { ok: boolean; errors?: string[] } {
   const validate = ajv.compile(schema);

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ComponentType } from "react";
 import { Search } from "lucide-react";
+import {
+  filterAndOrderCommandItems,
+  nextCommandIndexOnArrowDown,
+  nextCommandIndexOnArrowUp
+} from "./commandPaletteUtils";
 
 type CommandPaletteItem = {
   id: string;
@@ -18,31 +23,13 @@ type CommandPaletteProps = {
   onClose: () => void;
 };
 
-function fuzzyMatch(text: string, query: string): boolean {
-  const lower = text.toLowerCase();
-  const q = query.toLowerCase();
-  let qi = 0;
-  for (let i = 0; i < lower.length && qi < q.length; i++) {
-    if (lower[i] === q[qi]) qi++;
-  }
-  return qi === q.length;
-}
-
 export function CommandPalette({ open, items, onSelect, onClose }: CommandPaletteProps): JSX.Element | null {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return items;
-    return items.filter(
-      (item) =>
-        fuzzyMatch(item.label, query) ||
-        fuzzyMatch(item.subtitle, query) ||
-        (item.disabledReason ? fuzzyMatch(item.disabledReason, query) : false)
-    );
-  }, [items, query]);
+  const filtered = useMemo(() => filterAndOrderCommandItems(items, query), [items, query]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -73,10 +60,10 @@ export function CommandPalette({ open, items, onSelect, onClose }: CommandPalett
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+        setActiveIndex((index) => nextCommandIndexOnArrowDown(index, filtered.length));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setActiveIndex((i) => Math.max(i - 1, 0));
+        setActiveIndex((index) => nextCommandIndexOnArrowUp(index));
       } else if (e.key === "Enter" && filtered[activeIndex]) {
         e.preventDefault();
         handleSelect(filtered[activeIndex]);

@@ -14,3 +14,4 @@ docs/artifacts/phase-c/*-phasec-playwright/run-env.txt
 docs/artifacts/phase-c/*-phasec-playwright/playwright-console.log
 docs/artifacts/phase-c/*-phasec-playwright/playwright-network.log
 docs/artifacts/phase-c/*-phasec-playwright/project-history-rerun.json
+coverage/

@@ -1,0 +1,424 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`promptPack parameterization > changes extraction prompt content based on project, chunks, and instructions 1`] = `
+{
+  "promptA": "Project: Northern Ledger
+
+Task:
+- Extract new or updated structured canon information from the provided chunks.
+- Only emit entities/claims that are supported by explicit quotes in these chunks.
+- You may reference existing entities by suggesting merges (existing id <-> new tempId) when confident.
+
+Output must match extraction.schema.json with schemaVersion "1.0".
+
+Additional instructions (may be empty):
+Focus on chapter seven deltas.
+
+Known entities (for merge suggestions; do NOT invent details beyond text):
+[
+  {
+    "id": "a-1",
+    "type": "character",
+    "displayName": "Rowan",
+    "aliases": [
+      "Roe"
+    ]
+  }
+]
+
+Provided chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 1,
+    "text": "Rowan hated winter crossings."
+  }
+]
+
+Field guidance (examples; not exhaustive):
+- character claims: age, physical_traits, relationships, goals, fears, backstory_facts, occupation
+- location claims: description, geography, notable_features
+- rule claims: constraint, limitation, cost, exception
+- term claims: definition, spelling, first_appearance
+
+IMPORTANT:
+- Prefer fewer, higher-confidence claims rather than many speculative ones.
+- If a detail appears uncertain in the text, lower confidence and keep value minimal.",
+  "promptB": "Project: Southern Atlas
+
+Task:
+- Extract new or updated structured canon information from the provided chunks.
+- Only emit entities/claims that are supported by explicit quotes in these chunks.
+- You may reference existing entities by suggesting merges (existing id <-> new tempId) when confident.
+
+Output must match extraction.schema.json with schemaVersion "1.0".
+
+Additional instructions (may be empty):
+
+
+Known entities (for merge suggestions; do NOT invent details beyond text):
+[
+  {
+    "id": "b-1",
+    "type": "location",
+    "displayName": "Sun Port",
+    "aliases": []
+  }
+]
+
+Provided chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 1,
+    "text": "Sun Port flooded every equinox."
+  }
+]
+
+Field guidance (examples; not exhaustive):
+- character claims: age, physical_traits, relationships, goals, fears, backstory_facts, occupation
+- location claims: description, geography, notable_features
+- rule claims: constraint, limitation, cost, exception
+- term claims: definition, spelling, first_appearance
+
+IMPORTANT:
+- Prefer fewer, higher-confidence claims rather than many speculative ones.
+- If a detail appears uncertain in the text, lower confidence and keep value minimal.",
+}
+`;
+
+exports[`promptPack parameterization > changes qa prompt content when relevant claims are present 1`] = `
+{
+  "promptWithClaims": "User question:
+What rule governs the bell tower?
+
+Output must match qa_answer.schema.json with schemaVersion "1.0".
+
+Optional relevant canon claims (may help; still must be supported by chunk quotes to cite):
+[
+  {
+    "entityName": "Bell Tower Rule",
+    "field": "constraint",
+    "value": "can only ring at sunset",
+    "status": "inferred"
+  }
+]
+
+Retrieved chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 4,
+    "text": "The bell tower can only ring at sunset."
+  }
+]
+
+Answering rules:
+- If you can answer with explicit support, use answerType="cited", provide a concise answer, confidence 0.6–1.0, and include >= 1 citation.
+- If the answer is not present in the chunks, use answerType="not_found", answer should say it is not found in the provided text, confidence 0.0–0.4, and citations must be [].
+- Do not cite from canon claims unless the claim is also supported by a quote in the retrieved chunks.",
+  "promptWithoutClaims": "User question:
+What rule governs the bell tower?
+
+Output must match qa_answer.schema.json with schemaVersion "1.0".
+
+Optional relevant canon claims (may help; still must be supported by chunk quotes to cite):
+[]
+
+Retrieved chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 4,
+    "text": "The bell tower can only ring at sunset."
+  }
+]
+
+Answering rules:
+- If you can answer with explicit support, use answerType="cited", provide a concise answer, confidence 0.6–1.0, and include >= 1 citation.
+- If the answer is not present in the chunks, use answerType="not_found", answer should say it is not found in the provided text, confidence 0.0–0.4, and citations must be [].
+- Do not cite from canon claims unless the claim is also supported by a quote in the retrieved chunks.",
+}
+`;
+
+exports[`promptPack snapshots > matches extraction system prompt snapshot 1`] = `
+"
+You are an information extraction engine for a fiction manuscript.
+
+Your job:
+1) Identify entities (characters, locations, organizations, artifacts, terms, rules).
+2) Extract ONLY explicit facts stated in the text as structured claims.
+3) Provide exact quotes as evidence for every claim.
+4) Suggest merges when two entities appear to be the same.
+
+
+SCOPE LIMITS:
+- You are NOT writing or rewriting prose.
+- Do NOT suggest alternative wording or generate new scenes.
+- Extract and classify only (entities, facts, metadata, citations).
+
+
+GROUNDING REQUIREMENTS:
+- Use ONLY the provided manuscript text context.
+- Do NOT infer unstated facts.
+- Do NOT guess POV character or setting if not clearly indicated; use "unknown" and nulls instead.
+- If multiple interpretations exist, choose the safest minimal extraction and lower confidence.
+
+
+EVIDENCE REQUIREMENTS:
+- Every claim MUST include at least one evidence item with:
+  - chunkOrdinal (integer)
+  - quote: an EXACT substring copied verbatim from the referenced chunk text
+- Quotes must be short and contiguous (typically 5–30 words).
+- Do NOT paraphrase evidence. Do NOT alter punctuation. Do NOT add ellipses.
+- If you cannot find an exact supporting quote in the provided text, DO NOT emit the claim.
+
+
+You MUST output ONLY valid JSON.
+Do NOT include markdown fences. Do NOT include commentary. Do NOT include trailing commas.
+Do NOT include any keys not defined by the schema.
+All strings must use standard JSON double quotes.
+
+"
+`;
+
+exports[`promptPack snapshots > matches extraction user prompt snapshot 1`] = `
+"Project: Atlas Draft
+
+Task:
+- Extract new or updated structured canon information from the provided chunks.
+- Only emit entities/claims that are supported by explicit quotes in these chunks.
+- You may reference existing entities by suggesting merges (existing id <-> new tempId) when confident.
+
+Output must match extraction.schema.json with schemaVersion "1.0".
+
+Additional instructions (may be empty):
+Focus on canonical details updated in this revision.
+
+Known entities (for merge suggestions; do NOT invent details beyond text):
+[
+  {
+    "id": "entity-001",
+    "type": "character",
+    "displayName": "Mara Quill",
+    "aliases": [
+      "Mara",
+      "Captain Quill"
+    ]
+  },
+  {
+    "id": "entity-002",
+    "type": "location",
+    "displayName": "Ironbridge Station",
+    "aliases": [
+      "the station"
+    ]
+  }
+]
+
+Provided chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 14,
+    "text": "Mara pressed her palm to the brass map while thunder shook Ironbridge Station."
+  },
+  {
+    "chunkOrdinal": 15,
+    "text": "She whispered that she feared the tunnels beneath the station would collapse."
+  }
+]
+
+Field guidance (examples; not exhaustive):
+- character claims: age, physical_traits, relationships, goals, fears, backstory_facts, occupation
+- location claims: description, geography, notable_features
+- rule claims: constraint, limitation, cost, exception
+- term claims: definition, spelling, first_appearance
+
+IMPORTANT:
+- Prefer fewer, higher-confidence claims rather than many speculative ones.
+- If a detail appears uncertain in the text, lower confidence and keep value minimal."
+`;
+
+exports[`promptPack snapshots > matches qa system prompt snapshot 1`] = `
+"
+You are a grounded question-answering engine for a fiction manuscript.
+
+Your job:
+- Answer the user's question using ONLY the provided context chunks.
+- If the answer is not explicitly supported in the provided chunks, respond with answerType="not_found".
+- For cited answers, include one or more exact quotes as citations.
+- Quotes must be exact substrings from the provided chunk text.
+
+
+SCOPE LIMITS:
+- You are NOT writing or rewriting prose.
+- Do NOT suggest alternative wording or generate new scenes.
+- Extract and classify only (entities, facts, metadata, citations).
+
+
+GROUNDING REQUIREMENTS:
+- Use ONLY the provided manuscript text context.
+- Do NOT infer unstated facts.
+- Do NOT guess POV character or setting if not clearly indicated; use "unknown" and nulls instead.
+- If multiple interpretations exist, choose the safest minimal extraction and lower confidence.
+
+
+EVIDENCE REQUIREMENTS:
+- Every claim MUST include at least one evidence item with:
+  - chunkOrdinal (integer)
+  - quote: an EXACT substring copied verbatim from the referenced chunk text
+- Quotes must be short and contiguous (typically 5–30 words).
+- Do NOT paraphrase evidence. Do NOT alter punctuation. Do NOT add ellipses.
+- If you cannot find an exact supporting quote in the provided text, DO NOT emit the claim.
+
+
+You MUST output ONLY valid JSON.
+Do NOT include markdown fences. Do NOT include commentary. Do NOT include trailing commas.
+Do NOT include any keys not defined by the schema.
+All strings must use standard JSON double quotes.
+
+"
+`;
+
+exports[`promptPack snapshots > matches qa user prompt snapshot 1`] = `
+"User question:
+Where does Mara meet Jonas?
+
+Output must match qa_answer.schema.json with schemaVersion "1.0".
+
+Optional relevant canon claims (may help; still must be supported by chunk quotes to cite):
+[
+  {
+    "entityName": "Mara Quill",
+    "field": "relationships",
+    "value": {
+      "with": "Jonas Vale",
+      "type": "ally"
+    },
+    "status": "confirmed"
+  }
+]
+
+Retrieved chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 9,
+    "text": "Mara met Jonas at Ironbridge Station before dawn and handed him the atlas key."
+  },
+  {
+    "chunkOrdinal": 10,
+    "text": "They argued over whether to enter the south tunnel."
+  }
+]
+
+Answering rules:
+- If you can answer with explicit support, use answerType="cited", provide a concise answer, confidence 0.6–1.0, and include >= 1 citation.
+- If the answer is not present in the chunks, use answerType="not_found", answer should say it is not found in the provided text, confidence 0.0–0.4, and citations must be [].
+- Do not cite from canon claims unless the claim is also supported by a quote in the retrieved chunks."
+`;
+
+exports[`promptPack snapshots > matches scene metadata system prompt snapshot 1`] = `
+"
+You are a scene metadata classifier for a fiction manuscript.
+
+Your job:
+- Determine POV mode for the scene: first, third_limited, omniscient, epistolary, or unknown.
+- If possible, identify the POV character NAME (from text or known characters).
+- Identify the scene setting (location name if known, else short settingText).
+- Optionally identify timeContextText if explicitly stated.
+- Provide exact evidence quotes supporting POV/setting decisions.
+
+
+SCOPE LIMITS:
+- You are NOT writing or rewriting prose.
+- Do NOT suggest alternative wording or generate new scenes.
+- Extract and classify only (entities, facts, metadata, citations).
+
+
+GROUNDING REQUIREMENTS:
+- Use ONLY the provided manuscript text context.
+- Do NOT infer unstated facts.
+- Do NOT guess POV character or setting if not clearly indicated; use "unknown" and nulls instead.
+- If multiple interpretations exist, choose the safest minimal extraction and lower confidence.
+
+
+EVIDENCE REQUIREMENTS:
+- Every claim MUST include at least one evidence item with:
+  - chunkOrdinal (integer)
+  - quote: an EXACT substring copied verbatim from the referenced chunk text
+- Quotes must be short and contiguous (typically 5–30 words).
+- Do NOT paraphrase evidence. Do NOT alter punctuation. Do NOT add ellipses.
+- If you cannot find an exact supporting quote in the provided text, DO NOT emit the claim.
+
+
+You MUST output ONLY valid JSON.
+Do NOT include markdown fences. Do NOT include commentary. Do NOT include trailing commas.
+Do NOT include any keys not defined by the schema.
+All strings must use standard JSON double quotes.
+
+"
+`;
+
+exports[`promptPack snapshots > matches scene metadata user prompt snapshot 1`] = `
+"Task:
+Classify POV and setting for ONE scene using ONLY the provided chunks.
+
+Output must match scene_extract.schema.json with schemaVersion "1.0".
+
+Known characters (for name matching; do NOT invent):
+[
+  {
+    "displayName": "Mara Quill",
+    "aliases": [
+      "Mara"
+    ]
+  },
+  {
+    "displayName": "Jonas Vale",
+    "aliases": [
+      "Jonas",
+      "Archivist Vale"
+    ]
+  }
+]
+
+Known locations (for name matching; do NOT invent):
+[
+  {
+    "displayName": "Ironbridge Station",
+    "aliases": [
+      "the station"
+    ]
+  },
+  {
+    "displayName": "South Tunnel",
+    "aliases": [
+      "the tunnel"
+    ]
+  }
+]
+
+Scene chunks (ONLY source of truth; quotes must come from here):
+[
+  {
+    "chunkOrdinal": 77,
+    "text": "I kept my lantern low as I crossed the platform at Ironbridge Station."
+  },
+  {
+    "chunkOrdinal": 78,
+    "text": "Jonas waited by the south tunnel gate, counting the echoes between trains."
+  }
+]
+
+Decision rules:
+- If first-person narration ("I", "my") dominates and internal thoughts are clearly from one narrator, use povMode="first".
+- If third person but tightly follows one character's interiority, use "third_limited" and set povName if clear.
+- If the scene freely moves between heads or has narrator-level knowledge not tied to one character, use "omniscient".
+- If the scene is in letters, diary entries, reports, etc., use "epistolary".
+- If unclear, use povMode="unknown" and povName=null with low confidence.
+
+Setting rules:
+- If an explicit location is named and matches knownLocations, set settingName.
+- Otherwise set settingText to a short grounded phrase (<= 12 words) from the scene (no invention).
+- If unclear, settingName=null and settingText=null with low confidence.
+
+Evidence rules:
+- If povMode != "unknown", include at least 1 evidence quote that supports it.
+- If settingConfidence >= 0.6, include at least 1 evidence quote."
+`;

@@ -60,6 +60,19 @@ function buildProvider(rootPath: string): LLMProvider {
 }
 
 const EYE_COLORS = ["green", "gray", "grey", "blue", "brown", "hazel", "amber", "black"];
+const NON_CHARACTER_NAMES = new Set([
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday"
+]);
+
+function isLikelyCharacterName(name: string): boolean {
+  return !NON_CHARACTER_NAMES.has(name.toLowerCase());
+}
 
 function extractEyeColorPhrase(text: string): string | null {
   const lowered = text.toLowerCase();
@@ -85,7 +98,7 @@ async function runDeterministicExtraction(
     while ((match = possessiveRegex.exec(chunk.text))) {
       const name = match[1];
       const phrase = match[2] ?? "";
-      if (!name || !phrase) continue;
+      if (!name || !phrase || !isLikelyCharacterName(name)) continue;
       lastName = name;
       const value = extractEyeColorPhrase(phrase);
       if (!value) continue;

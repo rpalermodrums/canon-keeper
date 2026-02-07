@@ -70,6 +70,13 @@ import {
   setGlobalState,
   setProjectState
 } from "./persistence";
+import {
+  beginAction as beginPendingAction,
+  computeLayoutMode,
+  endAction as endPendingAction,
+  isEditableElement,
+  toUserFacingError
+} from "./utils";
 
 export type AppSection =
   | "dashboard"
@@ -149,49 +156,6 @@ function nextSection(current: AppSection, delta: number): AppSection {
   }
   const next = (index + delta + APP_SECTIONS.length) % APP_SECTIONS.length;
   return APP_SECTIONS[next]!.id;
-}
-
-function sanitizeErrorMessage(err: unknown): string {
-  if (!(err instanceof Error)) return "Unknown error";
-  const raw = err.message;
-  if (/SQLITE_BUSY/i.test(raw)) return "The database is temporarily busy. Please try again in a moment.";
-  if (/SQLITE_LOCKED/i.test(raw)) return "The database is temporarily locked. Please try again in a moment.";
-  if (/SQLITE_CORRUPT/i.test(raw)) return "The database file appears to be damaged. Try running diagnostics from Settings.";
-  if (/SQLITE_READONLY/i.test(raw)) return "The database cannot be written to. Check your file permissions.";
-  const stripped = raw.replace(/\n\s*at\s+.+/g, "").trim();
-  return stripped || "Unknown error";
-}
-
-function toUserFacingError(
-  code: string,
-  err: unknown,
-  actionLabel?: string,
-  action?: string
-): Omit<UserFacingError, "id"> {
-  return {
-    code,
-    message: sanitizeErrorMessage(err),
-    actionLabel,
-    action
-  };
-}
-
-function isEditableElement(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tagName = target.tagName.toLowerCase();
-  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
-}
-
-function computeLayoutMode(width: number): LayoutMode {
-  if (width < 768) {
-    return "mobile";
-  }
-  if (width < 1200) {
-    return "tablet";
-  }
-  return "desktop";
 }
 
 export function useCanonkeeperApp() {
@@ -362,31 +326,11 @@ export function useCanonkeeperApp() {
   }, []);
 
   const beginAction = useCallback((namespace: ActionNamespace, label: ActionLabel) => {
-    setPendingActions((current) => {
-      const next = new Map(current);
-      const actions = new Set(next.get(namespace) ?? []);
-      actions.add(label);
-      next.set(namespace, actions);
-      return next;
-    });
+    setPendingActions((current) => beginPendingAction(current, namespace, label));
   }, []);
 
   const endAction = useCallback((namespace: ActionNamespace, label: ActionLabel) => {
-    setPendingActions((current) => {
-      const next = new Map(current);
-      const actions = next.get(namespace);
-      if (!actions) {
-        return current;
-      }
-      const nextActions = new Set(actions);
-      nextActions.delete(label);
-      if (nextActions.size === 0) {
-        next.delete(namespace);
-      } else {
-        next.set(namespace, nextActions);
-      }
-      return next;
-    });
+    setPendingActions((current) => endPendingAction(current, namespace, label));
   }, []);
 
   const refreshProcessingAndHistory = useCallback(async () => {

@@ -4,6 +4,14 @@ import type { ProjectDiagnostics } from "../api/ipc";
 import { EmptyState } from "../components/EmptyState";
 import { Spinner } from "../components/Spinner";
 import { StatusBadge } from "../components/StatusBadge";
+import {
+  areDiagnosticsReady,
+  canAddDocument,
+  canRunDiagnostics,
+  isDocumentPathValid,
+  isProjectPathValid,
+  stepState
+} from "./setupViewUtils";
 
 type SetupViewProps = {
   busy: boolean;
@@ -23,20 +31,6 @@ type SetupViewProps = {
   onAddDocument: () => void;
   onRunPreflight: () => void;
 };
-
-type StepState = "todo" | "active" | "done";
-
-function stepState(index: number, hasProject: boolean, hasDocuments: boolean, hasDiagnostics: boolean): StepState {
-  if (index === 0) {
-    return hasProject ? "done" : "active";
-  }
-  if (index === 1) {
-    if (!hasProject) return "todo";
-    return hasDocuments ? "done" : "active";
-  }
-  if (!hasProject || !hasDocuments) return "todo";
-  return hasDiagnostics ? "done" : "active";
-}
 
 const steps = [
   { num: 1, label: "Open Project Folder" },
@@ -62,9 +56,9 @@ export function SetupView({
   onAddDocument,
   onRunPreflight
 }: SetupViewProps): JSX.Element {
-  const diagnosticsReady = Boolean(healthCheck && healthCheck.details.length === 0);
-  const allowAddDocument = hasProject;
-  const allowDiagnostics = hasProject && hasDocuments;
+  const diagnosticsReady = areDiagnosticsReady(healthCheck);
+  const allowAddDocument = canAddDocument(hasProject);
+  const allowDiagnostics = canRunDiagnostics(hasProject, hasDocuments);
 
   return (
     <section className="flex flex-col gap-4">
@@ -161,7 +155,7 @@ export function SetupView({
           className="self-start rounded-sm border border-accent bg-accent px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-accent-strong cursor-pointer disabled:opacity-50"
           type="button"
           onClick={onCreateProject}
-          disabled={busy || !rootPath.trim()}
+          disabled={busy || !isProjectPathValid(rootPath)}
         >
           {busy ? <Spinner size="sm" /> : "Create / Open Project"}
         </button>
@@ -201,7 +195,7 @@ export function SetupView({
             className="rounded-sm border border-accent bg-accent px-4 py-2 text-sm font-medium text-text-inverse transition-colors hover:bg-accent-strong cursor-pointer disabled:opacity-50"
             type="button"
             onClick={onAddDocument}
-            disabled={busy || !allowAddDocument || !docPath.trim()}
+            disabled={busy || !isDocumentPathValid(hasProject, docPath)}
           >
             {busy ? <Spinner size="sm" /> : "Add Manuscript"}
           </button>

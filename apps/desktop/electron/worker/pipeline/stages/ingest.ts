@@ -46,7 +46,7 @@ async function extractText(filePath: string, kind: DocumentKind): Promise<string
   return fs.readFileSync(filePath, "utf8");
 }
 
-function diffByHash(existing: { id: string; text_hash: string }[], next: ChunkSpan[]) {
+export function diffByHash(existing: { id: string; text_hash: string }[], next: ChunkSpan[]) {
   const minLen = Math.min(existing.length, next.length);
   let prefix = 0;
   while (prefix < minLen && existing[prefix]?.text_hash === next[prefix]?.text_hash) {

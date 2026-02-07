@@ -7,14 +7,12 @@ import { FilterBar, FilterGroup } from "../components/FilterBar";
 import { Skeleton } from "../components/Skeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { TogglePill } from "../components/TogglePill";
-
-type IssueFilters = {
-  status: "open" | "dismissed" | "resolved" | "all";
-  severity: "all" | "low" | "medium" | "high";
-  type: string;
-  query: string;
-  sort: "recency" | "severity" | "type";
-};
+import {
+  DEFAULT_ISSUE_FILTERS,
+  filterAndSortIssues,
+  listKnownIssueTypes,
+  type IssueFilters
+} from "./issuesViewUtils";
 
 type IssuesViewProps = {
   busy: boolean;
@@ -67,10 +65,6 @@ const sortOptions = [
   { value: "type" as const, label: "Type" }
 ];
 
-const SEVERITY_WEIGHT: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
-const STYLE_ISSUE_TYPES = new Set(["repetition", "tone_drift", "dialogue_tic"]);
-
 const relativeTime = (unixMs: number): string => {
   const seconds = Math.floor((Date.now() - unixMs) / 1000);
   if (seconds < 60) return "just now";
@@ -118,31 +112,8 @@ export function IssuesView({
     return <IssuesSkeleton />;
   }
 
-  const filtered = issues
-    .filter((issue) => {
-      const statusMatch = filters.status === "all" || issue.status === filters.status;
-      const severityMatch = filters.severity === "all" || issue.severity === filters.severity;
-      const typeMatch = isStyleOnly
-        ? STYLE_ISSUE_TYPES.has(issue.type)
-        : !filters.type || issue.type === filters.type;
-      const q = filters.query.trim().toLowerCase();
-      const queryMatch = q.length === 0 || `${issue.title} ${issue.description} ${issue.type}`.toLowerCase().includes(q);
-      return statusMatch && severityMatch && typeMatch && queryMatch;
-    })
-    .sort((a, b) => {
-      if (filters.sort === "severity") {
-        const wa = SEVERITY_WEIGHT[a.severity] ?? 3;
-        const wb = SEVERITY_WEIGHT[b.severity] ?? 3;
-        return wa !== wb ? wa - wb : b.created_at - a.created_at;
-      }
-      if (filters.sort === "type") {
-        const cmp = a.type.localeCompare(b.type);
-        return cmp !== 0 ? cmp : b.created_at - a.created_at;
-      }
-      return b.created_at - a.created_at;
-    });
-
-  const knownTypes = Array.from(new Set(issues.map((issue) => issue.type))).sort();
+  const filtered = filterAndSortIssues(issues, filters);
+  const knownTypes = listKnownIssueTypes(issues);
 
   return (
     <section className="flex flex-col gap-4">
@@ -169,7 +140,7 @@ export function IssuesView({
           <button
             className="rounded-sm border border-transparent bg-transparent px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-primary cursor-pointer"
             type="button"
-            onClick={() => onFiltersChange({ status: "open", severity: "all", type: "", query: "", sort: "recency" })}
+            onClick={() => onFiltersChange(DEFAULT_ISSUE_FILTERS)}
           >
             Reset
           </button>

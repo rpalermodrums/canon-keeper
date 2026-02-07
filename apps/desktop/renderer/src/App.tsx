@@ -9,6 +9,7 @@ import { ProgressBanner } from "./components/ProgressBanner";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { WelcomeModal } from "./components/WelcomeModal";
+import { AppShellProvider } from "./context/AppShellContext";
 import { useTheme } from "./context/ThemeContext";
 import { APP_SECTIONS, type AppSection, useCanonkeeperApp } from "./state/useCanonkeeperApp";
 import { BibleView } from "./views/BibleView";
@@ -39,6 +40,14 @@ export function App(): JSX.Element {
   const app = useCanonkeeperApp();
   const { theme, setTheme } = useTheme();
   const isMobile = app.layoutMode === "mobile";
+  const appShell = {
+    activeSection: app.activeSection,
+    setActiveSection: (section: AppSection) => app.setActiveSection(section),
+    commandPaletteOpen: app.commandPaletteOpen,
+    setCommandPaletteOpen: (open: boolean) => app.setCommandPaletteOpen(open),
+    sidebarCollapsed: app.sidebarCollapsed,
+    setSidebarCollapsed: (collapsed: boolean) => app.setSidebarCollapsed(collapsed)
+  };
 
   const commandItems = [
     ...APP_SECTIONS.map((section) => ({
@@ -92,7 +101,7 @@ export function App(): JSX.Element {
     () => ({
       scenes: app.scenesLoaded ? (app.scenes.length > 0 ? app.scenes.length : undefined) : null,
       issues: app.issuesLoaded
-        ? (app.issues.filter((issue) => issue.status === "open").length || undefined)
+        ? app.issues.filter((issue) => issue.status === "open").length || undefined
         : null,
       bible: app.entitiesLoaded ? (app.entities.length > 0 ? app.entities.length : undefined) : null
     }),
@@ -100,337 +109,359 @@ export function App(): JSX.Element {
   );
 
   return (
-    <div className="flex min-h-screen">
-      {!isMobile ? (
-        <Sidebar
-          activeSection={app.activeSection}
-          onSectionChange={app.setActiveSection}
-          collapsed={app.layoutMode === "tablet" ? true : app.sidebarCollapsed}
-          onCollapsedChange={app.setSidebarCollapsed}
-          hasProject={hasProject}
-          badges={sidebarBadges}
-          disabled={app.bootState === "booting"}
-        />
-      ) : null}
+    <AppShellProvider value={appShell}>
+      <div className="flex min-h-screen">
+        {!isMobile ? (
+          <Sidebar
+            activeSection={app.activeSection}
+            onSectionChange={app.setActiveSection}
+            collapsed={app.layoutMode === "tablet" ? true : app.sidebarCollapsed}
+            onCollapsedChange={app.setSidebarCollapsed}
+            hasProject={hasProject}
+            badges={sidebarBadges}
+            disabled={app.bootState === "booting"}
+          />
+        ) : null}
 
-      {isMobile && app.mobileNavOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/35 md:hidden" onClick={() => app.setMobileNavOpen(false)}>
-          <div className="h-full w-[280px] border-r border-border bg-surface-1" onClick={(event) => event.stopPropagation()}>
-            <Sidebar
-              activeSection={app.activeSection}
-              onSectionChange={app.setActiveSection}
-              collapsed={false}
-              onCollapsedChange={() => {
-                // no-op in mobile drawer
-              }}
-              hasProject={hasProject}
-              badges={sidebarBadges}
-              disabled={app.bootState === "booting"}
-              showCollapseControl={false}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar
-          activeSection={app.activeSection}
-          projectName={app.project?.name ?? null}
-          status={app.status}
-          statusLabel={app.statusLabel}
-          theme={theme}
-          onThemeChange={setTheme}
-          layoutMode={app.layoutMode}
-          onToggleMobileNav={() => app.setMobileNavOpen((open) => !open)}
-          onOpenCommandPalette={() => app.setCommandPaletteOpen(true)}
-        />
-
-        {app.bootState === "booting" ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-text-secondary">
-            <Loader2 size={24} className="animate-spin text-accent" />
-            <p className="text-sm">Restoring your last session...</p>
-            <button
-              type="button"
-              className="mt-2 cursor-pointer text-xs text-text-muted underline transition-colors hover:text-text-primary"
-              onClick={app.skipBoot}
+        {isMobile && app.mobileNavOpen ? (
+          <div
+            className="fixed inset-0 z-50 bg-black/35 md:hidden"
+            onClick={() => app.setMobileNavOpen(false)}
+          >
+            <div
+              className="h-full w-[280px] border-r border-border bg-surface-1"
+              onClick={(event) => event.stopPropagation()}
             >
-              Skip and start fresh
-            </button>
+              <Sidebar
+                activeSection={app.activeSection}
+                onSectionChange={app.setActiveSection}
+                collapsed={false}
+                onCollapsedChange={() => {
+                  // no-op in mobile drawer
+                }}
+                hasProject={hasProject}
+                badges={sidebarBadges}
+                disabled={app.bootState === "booting"}
+                showCollapseControl={false}
+              />
+            </div>
           </div>
         ) : null}
 
-        <main className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"} ${app.bootState === "booting" ? "hidden" : ""}`}>
-          {app.errors.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {app.errors.map((err) => (
-                <InlineError
-                  key={err.id}
-                  error={err}
-                  onDismiss={() => app.dismissError(err.id)}
-                  onAction={app.onRunDiagnostics}
-                />
-              ))}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar
+            activeSection={app.activeSection}
+            projectName={app.project?.name ?? null}
+            status={app.status}
+            statusLabel={app.statusLabel}
+            theme={theme}
+            onThemeChange={setTheme}
+            layoutMode={app.layoutMode}
+            onToggleMobileNav={() => app.setMobileNavOpen((open) => !open)}
+            onOpenCommandPalette={() => app.setCommandPaletteOpen(true)}
+          />
+
+          {app.bootState === "booting" ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-text-secondary">
+              <Loader2 size={24} className="animate-spin text-accent" />
+              <p className="text-sm">Restoring your last session...</p>
+              <button
+                type="button"
+                className="mt-2 cursor-pointer text-xs text-text-muted underline transition-colors hover:text-text-primary"
+                onClick={app.skipBoot}
+              >
+                Skip and start fresh
+              </button>
             </div>
           ) : null}
-          <ProgressBanner processingState={app.processingState} statusPhase={app.status?.phase ?? "idle"} />
 
-          <div key={app.activeSection} className="animate-fade-in">
-            {app.activeSection === "dashboard" ? (
-              <DashboardView
-                loaded={app.project === null || app.scenesLoaded}
-                project={app.project}
-                status={app.status}
-                processingState={app.processingState}
-                history={app.history}
-                lastIngest={app.lastIngest}
-                projectStats={app.projectStats}
-                evidenceCoverage={app.evidenceCoverage}
-                continueIssueId={app.continueContext.issueId}
-                continueEntityId={app.continueContext.entityId}
-                continueSceneId={app.continueContext.sceneId}
-                onJumpToIssue={app.onJumpToIssue}
-                onJumpToEntity={app.onJumpToEntity}
-                onJumpToScene={app.onJumpToScene}
-              />
+          <main
+            className={`flex flex-1 flex-col gap-4 ${isMobile ? "p-3 pb-20" : "p-6"} ${app.bootState === "booting" ? "hidden" : ""}`}
+          >
+            {app.errors.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {app.errors.map((err) => (
+                  <InlineError
+                    key={err.id}
+                    error={err}
+                    onDismiss={() => app.dismissError(err.id)}
+                    onAction={app.onRunDiagnostics}
+                  />
+                ))}
+              </div>
             ) : null}
-
-            {app.activeSection === "setup" ? (
-              <SetupView
-                busy={app.isBusy("project")}
-                rootPath={app.rootPath}
-                docPath={app.docPath}
-                healthCheck={app.healthCheck}
-                hasProject={hasProject}
-                hasDocuments={hasDocuments}
-                bootError={app.bootError}
-                onClearBootError={app.clearBootError}
-                onRootPathChange={app.setRootPath}
-                onDocPathChange={app.setDocPath}
-                onPickProjectRoot={app.onPickProjectRoot}
-                onCreateProject={app.onCreateProject}
-                onPickDocument={app.onPickDocument}
-                onUseFixture={app.onUseFixture}
-                onAddDocument={app.onAddDocument}
-                onRunPreflight={app.onRunDiagnostics}
-              />
-            ) : null}
-
-            {app.activeSection === "search" ? (
-              <SearchView
-                busy={app.isBusy("search")}
-                searchQuery={app.searchQuery}
-                searchResults={app.searchResults}
-                questionText={app.questionText}
-                askResult={app.askResult}
-                onSearchQueryChange={app.setSearchQuery}
-                onQuestionTextChange={app.setQuestionText}
-                onSearch={app.onSearch}
-                onAsk={app.onAsk}
-              />
-            ) : null}
-
-            {app.activeSection === "scenes" ? (
-              <ScenesView
-                busy={app.busy}
-                loaded={app.scenesLoaded}
-                scenes={app.scenes}
-                selectedSceneId={app.selectedSceneId}
-                sceneDetail={app.sceneDetail}
-                query={app.sceneQuery}
-                onQueryChange={app.setSceneQuery}
-                onRefresh={() => void app.refreshScenes()}
-                onSelectScene={(sceneId) => void app.onSelectScene(sceneId)}
-                onOpenEvidence={(title, detail) => app.onOpenEvidenceFromScene(title, detail)}
-              />
-            ) : null}
-
-            {app.activeSection === "issues" ? (
-              <IssuesView
-                busy={app.isBusy("issues")}
-                loaded={app.issuesLoaded}
-                issues={app.issues}
-                selectedIssueId={app.selectedIssueId}
-                filters={app.issueFilters}
-                onFiltersChange={app.setIssueFilters}
-                onRefresh={() => void app.refreshIssues()}
-                onSelectIssue={app.onSelectIssue}
-                onRequestDismiss={app.onRequestDismissIssue}
-                onResolve={(issueId) => void app.onResolveIssue(issueId)}
-                onOpenEvidence={(title, issue) => app.onOpenEvidenceFromIssue(title, issue)}
-                onNavigateToScene={(sceneId) => {
-                  app.setActiveSection("scenes");
-                  void app.onSelectScene(sceneId);
-                }}
-              />
-            ) : null}
-
-            {app.activeSection === "style" ? (
-              <StyleView
-                busy={app.busy}
-                loaded={app.styleLoaded}
-                report={app.styleReport}
-                styleIssues={app.styleIssues}
-                onRefresh={() => void app.refreshStyle()}
-                onOpenIssueEvidence={(title, issue) => app.onOpenEvidenceFromIssue(title, issue)}
-                onOpenMetricEvidence={(title, evidence) =>
-                  app.openEvidence(title, evidence, {
-                    source: "style",
-                    sourceId: title.toLowerCase().replace(/\s+/g, "-")
-                  })
-                }
-                onNavigateToScene={(sceneId) => {
-                  app.setActiveSection("scenes");
-                  void app.onSelectScene(sceneId);
-                }}
-              />
-            ) : null}
-
-            {app.activeSection === "bible" ? (
-              <BibleView
-                busy={app.isBusy("bible")}
-                loaded={app.entitiesLoaded}
-                entities={app.entities}
-                selectedEntityId={app.selectedEntityId}
-                entityDetail={app.entityDetail}
-                filters={app.entityFilters}
-                onFiltersChange={app.setEntityFilters}
-                onRefresh={() => void app.refreshEntities()}
-                onSelectEntity={(entityId) => void app.onSelectEntity(entityId)}
-                onOpenEvidence={(title, detail, context) => app.onOpenEvidenceFromClaim(title, detail, context)}
-                onRequestConfirmClaim={app.setConfirmClaimDraft}
-              />
-            ) : null}
-
-            {app.activeSection === "export" ? (
-              <ExportView
-                busy={app.isBusy("export")}
-                exportDir={app.exportDir}
-                exportKind={app.exportKind}
-                lastResult={app.lastExportResult}
-                onExportDirChange={app.setExportDir}
-                onExportKindChange={app.setExportKind}
-                onPickExportDir={app.onPickExportDir}
-                onRunExport={app.onRunExport}
-              />
-            ) : null}
-
-            {app.activeSection === "settings" ? (
-              <SettingsView
-                status={app.status}
-                healthCheck={app.healthCheck}
-                hasProject={hasProject}
-                busy={app.isBusy("system")}
-                onRunDiagnostics={app.onRunDiagnostics}
-                onForgetProject={app.onForgetLastProject}
-                onResetProjectState={app.onResetProjectState}
-                theme={theme}
-                onThemeChange={setTheme}
-                sidebarCollapsed={app.sidebarCollapsed}
-                onSidebarCollapsedChange={app.setSidebarCollapsed}
-              />
-            ) : null}
-          </div>
-        </main>
-      </div>
-
-      {isMobile ? (
-        <nav className="fixed right-0 bottom-0 left-0 z-40 border-t border-border bg-surface-2/95 px-2 py-2 backdrop-blur md:hidden">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {mobileSections.map((sectionId) => {
-              const section = APP_SECTIONS.find((item) => item.id === sectionId);
-              if (!section) {
-                return null;
-              }
-              const Icon = section.icon;
-              const active = app.activeSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  className={`inline-flex min-w-[78px] flex-col items-center gap-1 rounded-sm px-2 py-1 text-[11px] cursor-pointer ${
-                    active ? "bg-accent-soft text-accent-strong dark:text-accent" : "text-text-muted"
-                  }`}
-                  onClick={() => app.setActiveSection(section.id)}
-                >
-                  <Icon size={14} />
-                  <span>{section.label}</span>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              className="inline-flex min-w-[78px] flex-col items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-text-muted cursor-pointer"
-              onClick={() => app.setCommandPaletteOpen(true)}
-            >
-              <MoreHorizontal size={14} />
-              <span>More</span>
-            </button>
-          </div>
-        </nav>
-      ) : null}
-
-      {app.showWelcome ? <WelcomeModal onGetStarted={app.onWelcomeGetStarted} onSkip={app.dismissWelcome} /> : null}
-
-      <EvidenceDrawer
-        open={app.evidenceDrawer.open}
-        title={app.evidenceDrawer.title}
-        sourceLabel={sourceLabel(app.evidenceDrawer.source, app.evidenceDrawer.sourceId)}
-        evidence={app.evidenceDrawer.evidence}
-        layoutMode={app.layoutMode}
-        pinned={app.evidencePinned}
-        onTogglePin={() => app.setEvidencePinned((current) => !current)}
-        onClose={app.closeEvidence}
-      />
-
-      <CommandPalette
-        open={app.commandPaletteOpen}
-        items={commandItems}
-        onSelect={app.onCommandSelect}
-        onClose={() => app.setCommandPaletteOpen(false)}
-      />
-
-      <ConfirmModal
-        open={Boolean(app.confirmClaimDraft)}
-        title="Confirm This Fact"
-        message="Mark this as confirmed. CanonKeeper will treat it as established fact for your story."
-        confirmLabel="Confirm"
-        onCancel={() => app.setConfirmClaimDraft(null)}
-        onConfirm={() => void app.onConfirmClaim()}
-      >
-        {app.confirmClaimDraft ? (
-          <div className="rounded-sm border border-border bg-surface-1 p-2 text-sm">
-            <span className="font-medium text-text-primary">{app.confirmClaimDraft.field}</span>
-            <span className="ml-2 text-text-muted">{app.confirmClaimDraft.evidenceCount} {app.confirmClaimDraft.evidenceCount === 1 ? "reference" : "references"} found</span>
-          </div>
-        ) : null}
-      </ConfirmModal>
-
-      <ConfirmModal
-        open={Boolean(app.dismissIssueDraft)}
-        title="Dismiss Issue"
-        message="Enter a reason before dismissing. You can undo within the toast timeout."
-        confirmLabel="Dismiss Issue"
-        danger
-        onCancel={() => app.setDismissIssueDraft(null)}
-        onConfirm={() => void app.onConfirmDismissIssue()}
-      >
-        {app.dismissIssueDraft ? (
-          <label className="flex flex-col gap-1 text-sm text-text-secondary">
-            Reason
-            <textarea
-              value={app.dismissIssueDraft.reason}
-              onChange={(event) =>
-                app.setDismissIssueDraft((current) =>
-                  current ? { ...current, reason: event.target.value } : current
-                )
-              }
-              placeholder="Why is this issue being dismissed?"
+            <ProgressBanner
+              processingState={app.processingState}
+              statusPhase={app.status?.phase ?? "idle"}
             />
-          </label>
-        ) : null}
-      </ConfirmModal>
 
-      <AsyncToast toasts={app.toasts} onDismiss={app.dismissToast} />
-    </div>
+            <div key={app.activeSection} className="animate-fade-in">
+              {app.activeSection === "dashboard" ? (
+                <DashboardView
+                  loaded={app.project === null || app.scenesLoaded}
+                  project={app.project}
+                  status={app.status}
+                  processingState={app.processingState}
+                  history={app.history}
+                  lastIngest={app.lastIngest}
+                  projectStats={app.projectStats}
+                  evidenceCoverage={app.evidenceCoverage}
+                  continueIssueId={app.continueContext.issueId}
+                  continueEntityId={app.continueContext.entityId}
+                  continueSceneId={app.continueContext.sceneId}
+                  onJumpToIssue={app.onJumpToIssue}
+                  onJumpToEntity={app.onJumpToEntity}
+                  onJumpToScene={app.onJumpToScene}
+                />
+              ) : null}
+
+              {app.activeSection === "setup" ? (
+                <SetupView
+                  busy={app.isBusy("project")}
+                  rootPath={app.rootPath}
+                  docPath={app.docPath}
+                  healthCheck={app.healthCheck}
+                  hasProject={hasProject}
+                  hasDocuments={hasDocuments}
+                  bootError={app.bootError}
+                  onClearBootError={app.clearBootError}
+                  onRootPathChange={app.setRootPath}
+                  onDocPathChange={app.setDocPath}
+                  onPickProjectRoot={app.onPickProjectRoot}
+                  onCreateProject={app.onCreateProject}
+                  onPickDocument={app.onPickDocument}
+                  onUseFixture={app.onUseFixture}
+                  onAddDocument={app.onAddDocument}
+                  onRunPreflight={app.onRunDiagnostics}
+                />
+              ) : null}
+
+              {app.activeSection === "search" ? (
+                <SearchView
+                  busy={app.isBusy("search")}
+                  searchQuery={app.searchQuery}
+                  searchResults={app.searchResults}
+                  questionText={app.questionText}
+                  askResult={app.askResult}
+                  onSearchQueryChange={app.setSearchQuery}
+                  onQuestionTextChange={app.setQuestionText}
+                  onSearch={app.onSearch}
+                  onAsk={app.onAsk}
+                />
+              ) : null}
+
+              {app.activeSection === "scenes" ? (
+                <ScenesView
+                  busy={app.busy}
+                  loaded={app.scenesLoaded}
+                  scenes={app.scenes}
+                  selectedSceneId={app.selectedSceneId}
+                  sceneDetail={app.sceneDetail}
+                  query={app.sceneQuery}
+                  onQueryChange={app.setSceneQuery}
+                  onRefresh={() => void app.refreshScenes()}
+                  onSelectScene={(sceneId) => void app.onSelectScene(sceneId)}
+                  onOpenEvidence={(title, detail) => app.onOpenEvidenceFromScene(title, detail)}
+                />
+              ) : null}
+
+              {app.activeSection === "issues" ? (
+                <IssuesView
+                  busy={app.isBusy("issues")}
+                  loaded={app.issuesLoaded}
+                  issues={app.issues}
+                  selectedIssueId={app.selectedIssueId}
+                  filters={app.issueFilters}
+                  onFiltersChange={app.setIssueFilters}
+                  onRefresh={() => void app.refreshIssues()}
+                  onSelectIssue={app.onSelectIssue}
+                  onRequestDismiss={app.onRequestDismissIssue}
+                  onResolve={(issueId) => void app.onResolveIssue(issueId)}
+                  onOpenEvidence={(title, issue) => app.onOpenEvidenceFromIssue(title, issue)}
+                  onNavigateToScene={(sceneId) => {
+                    app.setActiveSection("scenes");
+                    void app.onSelectScene(sceneId);
+                  }}
+                />
+              ) : null}
+
+              {app.activeSection === "style" ? (
+                <StyleView
+                  busy={app.busy}
+                  loaded={app.styleLoaded}
+                  report={app.styleReport}
+                  styleIssues={app.styleIssues}
+                  onRefresh={() => void app.refreshStyle()}
+                  onOpenIssueEvidence={(title, issue) => app.onOpenEvidenceFromIssue(title, issue)}
+                  onOpenMetricEvidence={(title, evidence) =>
+                    app.openEvidence(title, evidence, {
+                      source: "style",
+                      sourceId: title.toLowerCase().replace(/\s+/g, "-")
+                    })
+                  }
+                  onNavigateToScene={(sceneId) => {
+                    app.setActiveSection("scenes");
+                    void app.onSelectScene(sceneId);
+                  }}
+                />
+              ) : null}
+
+              {app.activeSection === "bible" ? (
+                <BibleView
+                  busy={app.isBusy("bible")}
+                  loaded={app.entitiesLoaded}
+                  entities={app.entities}
+                  selectedEntityId={app.selectedEntityId}
+                  entityDetail={app.entityDetail}
+                  filters={app.entityFilters}
+                  onFiltersChange={app.setEntityFilters}
+                  onRefresh={() => void app.refreshEntities()}
+                  onSelectEntity={(entityId) => void app.onSelectEntity(entityId)}
+                  onOpenEvidence={(title, detail, context) =>
+                    app.onOpenEvidenceFromClaim(title, detail, context)
+                  }
+                  onRequestConfirmClaim={app.setConfirmClaimDraft}
+                />
+              ) : null}
+
+              {app.activeSection === "export" ? (
+                <ExportView
+                  busy={app.isBusy("export")}
+                  exportDir={app.exportDir}
+                  exportKind={app.exportKind}
+                  lastResult={app.lastExportResult}
+                  onExportDirChange={app.setExportDir}
+                  onExportKindChange={app.setExportKind}
+                  onPickExportDir={app.onPickExportDir}
+                  onRunExport={app.onRunExport}
+                />
+              ) : null}
+
+              {app.activeSection === "settings" ? (
+                <SettingsView
+                  status={app.status}
+                  healthCheck={app.healthCheck}
+                  hasProject={hasProject}
+                  busy={app.isBusy("system")}
+                  onRunDiagnostics={app.onRunDiagnostics}
+                  onForgetProject={app.onForgetLastProject}
+                  onResetProjectState={app.onResetProjectState}
+                  theme={theme}
+                  onThemeChange={setTheme}
+                  sidebarCollapsed={app.sidebarCollapsed}
+                  onSidebarCollapsedChange={app.setSidebarCollapsed}
+                />
+              ) : null}
+            </div>
+          </main>
+        </div>
+
+        {isMobile ? (
+          <nav className="fixed right-0 bottom-0 left-0 z-40 border-t border-border bg-surface-2/95 px-2 py-2 backdrop-blur md:hidden">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {mobileSections.map((sectionId) => {
+                const section = APP_SECTIONS.find((item) => item.id === sectionId);
+                if (!section) {
+                  return null;
+                }
+                const Icon = section.icon;
+                const active = app.activeSection === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={`inline-flex min-w-[78px] flex-col items-center gap-1 rounded-sm px-2 py-1 text-[11px] cursor-pointer ${
+                      active
+                        ? "bg-accent-soft text-accent-strong dark:text-accent"
+                        : "text-text-muted"
+                    }`}
+                    onClick={() => app.setActiveSection(section.id)}
+                  >
+                    <Icon size={14} />
+                    <span>{section.label}</span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className="inline-flex min-w-[78px] flex-col items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-text-muted cursor-pointer"
+                onClick={() => app.setCommandPaletteOpen(true)}
+              >
+                <MoreHorizontal size={14} />
+                <span>More</span>
+              </button>
+            </div>
+          </nav>
+        ) : null}
+
+        {app.showWelcome ? (
+          <WelcomeModal onGetStarted={app.onWelcomeGetStarted} onSkip={app.dismissWelcome} />
+        ) : null}
+
+        <EvidenceDrawer
+          open={app.evidenceDrawer.open}
+          title={app.evidenceDrawer.title}
+          sourceLabel={sourceLabel(app.evidenceDrawer.source, app.evidenceDrawer.sourceId)}
+          evidence={app.evidenceDrawer.evidence}
+          layoutMode={app.layoutMode}
+          pinned={app.evidencePinned}
+          onTogglePin={() => app.setEvidencePinned((current) => !current)}
+          onClose={app.closeEvidence}
+        />
+
+        <CommandPalette
+          open={app.commandPaletteOpen}
+          items={commandItems}
+          onSelect={app.onCommandSelect}
+          onClose={() => app.setCommandPaletteOpen(false)}
+        />
+
+        <ConfirmModal
+          open={Boolean(app.confirmClaimDraft)}
+          title="Confirm This Fact"
+          message="Mark this as confirmed. CanonKeeper will treat it as established fact for your story."
+          confirmLabel="Confirm"
+          onCancel={() => app.setConfirmClaimDraft(null)}
+          onConfirm={() => void app.onConfirmClaim()}
+        >
+          {app.confirmClaimDraft ? (
+            <div className="rounded-sm border border-border bg-surface-1 p-2 text-sm">
+              <span className="font-medium text-text-primary">{app.confirmClaimDraft.field}</span>
+              <span className="ml-2 text-text-muted">
+                {app.confirmClaimDraft.evidenceCount}{" "}
+                {app.confirmClaimDraft.evidenceCount === 1 ? "reference" : "references"} found
+              </span>
+            </div>
+          ) : null}
+        </ConfirmModal>
+
+        <ConfirmModal
+          open={Boolean(app.dismissIssueDraft)}
+          title="Dismiss Issue"
+          message="Enter a reason before dismissing. You can undo within the toast timeout."
+          confirmLabel="Dismiss Issue"
+          danger
+          onCancel={() => app.setDismissIssueDraft(null)}
+          onConfirm={() => void app.onConfirmDismissIssue()}
+        >
+          {app.dismissIssueDraft ? (
+            <label className="flex flex-col gap-1 text-sm text-text-secondary">
+              Reason
+              <textarea
+                value={app.dismissIssueDraft.reason}
+                onChange={(event) =>
+                  app.setDismissIssueDraft((current) =>
+                    current ? { ...current, reason: event.target.value } : current
+                  )
+                }
+                placeholder="Why is this issue being dismissed?"
+              />
+            </label>
+          ) : null}
+        </ConfirmModal>
+
+        <AsyncToast toasts={app.toasts} onDismiss={app.dismissToast} />
+      </div>
+    </AppShellProvider>
   );
 }

@@ -3,24 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import { WorkerClient } from "./worker/client";
+import { coerceWorkerStatus } from "./main-utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let workerClient: WorkerClient | null = null;
-
-type WorkerStatusPayload = {
-  state: "idle" | "busy";
-  phase: "idle" | "ingest" | "extract" | "style" | "continuity" | "export" | "error";
-  lastJob?: string;
-  activeJobLabel: string | null;
-  projectId: string | null;
-  queueDepth: number;
-  workerState: "ready" | "restarting" | "down";
-  lastSuccessfulRunAt: string | null;
-  lastError: { subsystem: string; message: string } | null;
-};
 
 type DiagnosticsPayload = {
   ipc: "ok" | "down";
@@ -30,50 +19,6 @@ type DiagnosticsPayload = {
   details: string[];
   recommendations: string[];
 };
-
-function coerceWorkerStatus(
-  workerState: "ready" | "restarting" | "down",
-  rawStatus: Record<string, unknown> | null,
-  runtimeError: string | null
-): WorkerStatusPayload {
-  const source = rawStatus ?? {};
-  const structuredError =
-    source.lastError && typeof source.lastError === "object"
-      ? (source.lastError as { subsystem: string; message: string })
-      : runtimeError
-        ? { subsystem: "worker", message: runtimeError }
-        : null;
-
-  const state =
-    workerState === "restarting"
-      ? "busy"
-      : source.state === "busy"
-        ? "busy"
-        : "idle";
-
-  return {
-    state,
-    phase:
-      workerState === "down"
-        ? "error"
-        : source.phase === "ingest" ||
-            source.phase === "extract" ||
-            source.phase === "style" ||
-            source.phase === "continuity" ||
-            source.phase === "export" ||
-            source.phase === "error"
-          ? source.phase
-          : "idle",
-    lastJob: typeof source.lastJob === "string" ? source.lastJob : undefined,
-    activeJobLabel: typeof source.activeJobLabel === "string" ? source.activeJobLabel : null,
-    projectId: typeof source.projectId === "string" ? source.projectId : null,
-    queueDepth: typeof source.queueDepth === "number" ? source.queueDepth : 0,
-    workerState,
-    lastSuccessfulRunAt:
-      typeof source.lastSuccessfulRunAt === "string" ? source.lastSuccessfulRunAt : null,
-    lastError: structuredError
-  };
-}
 
 function installDevtoolsConsoleNoiseFilter(): void {
   // Chromium devtools may emit unsupported protocol warnings in Electron dev mode.

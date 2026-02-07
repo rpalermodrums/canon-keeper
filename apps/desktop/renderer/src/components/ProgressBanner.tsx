@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import {
+  deriveWorkingSuccessTransition,
+  normalizePhaseToStage,
+  pickLatest,
+  resolveSuccessTimerCompletion,
+  type ProcessingRow
+} from "./progressBannerUtils";
 
 const STAGE_LABELS: Record<string, string> = {
   ingest: "Reading your manuscript",
@@ -10,34 +17,10 @@ const STAGE_LABELS: Record<string, string> = {
   continuity: "Checking for continuity issues"
 };
 
-type ProcessingRow = {
-  stage: string;
-  status: string;
-  error: string | null;
-  updated_at: number;
-  document_path: string;
-};
-
 type ProgressBannerProps = {
   processingState: ProcessingRow[];
   statusPhase: string;
 };
-
-function pickLatest(rows: ProcessingRow[]): ProcessingRow | null {
-  if (rows.length === 0) {
-    return null;
-  }
-  return rows
-    .slice()
-    .sort((a, b) => b.updated_at - a.updated_at)[0] ?? null;
-}
-
-function normalizePhaseToStage(phase: string): string {
-  if (phase === "extract") {
-    return "extraction";
-  }
-  return phase;
-}
 
 function friendlyStageLabel(stage: string): string {
   return STAGE_LABELS[stage] ?? stage.charAt(0).toUpperCase() + stage.slice(1);
@@ -66,19 +49,20 @@ export function ProgressBanner({ processingState, statusPhase }: ProgressBannerP
   const isWorking = hasRunningRows;
 
   useEffect(() => {
-    if (isWorking) {
-      wasWorkingRef.current = true;
-      setShowSuccess(false);
+    const transition = deriveWorkingSuccessTransition(isWorking, wasWorkingRef.current);
+    wasWorkingRef.current = transition.nextWasWorking;
+    setShowSuccess(transition.nextShowSuccess);
+
+    if (transition.hideAfterMs === null) {
       return;
     }
-    if (!wasWorkingRef.current) {
-      return;
-    }
-    setShowSuccess(true);
+
     const timer = window.setTimeout(() => {
-      setShowSuccess(false);
-      wasWorkingRef.current = false;
-    }, 5000);
+      const resolved = resolveSuccessTimerCompletion();
+      setShowSuccess(resolved.nextShowSuccess);
+      wasWorkingRef.current = resolved.nextWasWorking;
+    }, transition.hideAfterMs);
+
     return () => {
       window.clearTimeout(timer);
     };

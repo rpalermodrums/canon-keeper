@@ -8,3 +8,5 @@ pre-push:
   commands:
     test:
       run: bun run test
+    coverage:
+      run: bun run test:coverage

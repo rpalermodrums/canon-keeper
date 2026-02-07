@@ -88,20 +88,24 @@ export type ProjectDiagnostics = SystemHealthCheck & {
   recommendations: string[];
 };
 
-let status: WorkerStatus = {
-  state: "idle",
-  phase: "idle",
-  activeJobLabel: null,
-  queueDepth: 0,
-  projectId: null,
-  lastSuccessfulRunAt: null,
-  lastError: null
-};
+function createInitialStatus(): WorkerStatus {
+  return {
+    state: "idle",
+    phase: "idle",
+    activeJobLabel: null,
+    queueDepth: 0,
+    projectId: null,
+    lastSuccessfulRunAt: null,
+    lastError: null
+  };
+}
+
+let status: WorkerStatus = createInitialStatus();
 let currentProjectId: string | null = null;
 let currentProjectRoot: string | null = null;
 let lastSuccessfulRunAt: string | null = null;
 let statusError: { subsystem: string; message: string } | null = null;
-type WorkerSession = {
+export type WorkerSession = {
   handle: DatabaseHandle;
   watcher: FSWatcher;
   queue: PersistentJobQueue<WorkerJob, WorkerJobResult>;
@@ -645,6 +649,20 @@ function enqueueIngest(filePath: string, projectId: string, awaitResult = false)
   return active.queue.enqueue(job, `ingest:${projectId}:${filePath}`, awaitResult);
 }
 
+const NON_BUSY_RPC_METHODS = new Set<WorkerMethods>([
+  "project.getStatus",
+  "project.subscribeStatus",
+  "project.getCurrent",
+  "project.getDiagnostics",
+  "project.stats",
+  "project.evidenceCoverage",
+  "jobs.list"
+]);
+
+export function shouldTrackRpcAsBusy(method: WorkerMethods | string): boolean {
+  return !NON_BUSY_RPC_METHODS.has(method as WorkerMethods);
+}
+
 async function dispatch(method: WorkerMethods, params?: unknown): Promise<unknown> {
   switch (method) {
     case "project.createOrOpen":
@@ -932,44 +950,63 @@ process.on("beforeExit", () => {
   void teardownSession();
 });
 
-process.on("message", async (message: RpcRequest) => {
+export async function handleRpcMessage(message: RpcRequest): Promise<RpcResponse | null> {
   if (!message || typeof message !== "object") {
-    return;
+    return null;
   }
 
   const { id, method, params } = message;
   if (!id || !method) {
-    return;
+    return null;
   }
 
   const response: RpcResponse = { id };
-  const shouldTrackRpcAsBusy =
-    method !== "project.getStatus" &&
-    method !== "project.subscribeStatus" &&
-    method !== "project.getCurrent" &&
-    method !== "project.getDiagnostics" &&
-    method !== "project.stats" &&
-    method !== "project.evidenceCoverage" &&
-    method !== "jobs.list";
+  const trackAsBusy = shouldTrackRpcAsBusy(method);
 
   try {
-    if (shouldTrackRpcAsBusy) {
+    if (trackAsBusy) {
       setStatus({ state: "busy", lastJob: method });
     }
     response.result = await dispatch(method as WorkerMethods, params);
-    if (shouldTrackRpcAsBusy) {
+    if (trackAsBusy) {
       markSuccess();
       setStatus({ state: "idle", lastJob: method });
     }
   } catch (error) {
-    if (shouldTrackRpcAsBusy) {
+    if (trackAsBusy) {
       markFailure(`rpc.${method}`, error);
       setStatus({ state: "idle", lastJob: method });
     }
     response.error = { message: error instanceof Error ? error.message : "Unknown error" };
   }
 
-  if (process.send) {
+  return response;
+}
+
+function resetWorkerStateForTests(): void {
+  status = createInitialStatus();
+  currentProjectId = null;
+  currentProjectRoot = null;
+  lastSuccessfulRunAt = null;
+  statusError = null;
+}
+
+export const __testHooks = {
+  dispatch,
+  handleJob,
+  ensureSession,
+  teardownSession,
+  getSession: (): WorkerSession | null => session,
+  getDebounceTimerCount: (): number => debounceTimers.size,
+  seedDebounceTimerForTests: (key: string): void => {
+    debounceTimers.set(key, setTimeout(() => undefined, 60_000));
+  },
+  resetWorkerStateForTests
+};
+
+process.on("message", async (message: RpcRequest) => {
+  const response = await handleRpcMessage(message);
+  if (response && process.send) {
     process.send(response);
   }
 });
