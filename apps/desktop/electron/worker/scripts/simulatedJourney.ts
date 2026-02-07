@@ -39,6 +39,14 @@ type ProjectHistory = {
   events: Array<{ id: string; event_type: string }>;
 };
 
+type AssertionResult = {
+  id: string;
+  status: "pass" | "fail" | "skipped";
+  expected: string;
+  actual: string;
+  evidence: string;
+};
+
 class RpcWorkerHarness {
   private readonly child: ChildProcess;
   private readonly pending = new Map<
@@ -155,8 +163,23 @@ function copyFixture(rootPath: string, fixtureName: string): string {
 async function run(): Promise<void> {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "canonkeeper-journey-"));
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
-  const artifactRoot = path.resolve(process.cwd(), "docs", "artifacts", "phase-c", runId);
-  fs.mkdirSync(artifactRoot, { recursive: true });
+  const artifactRoot = path.resolve(process.cwd(), "output", "agent-test", runId);
+  const exportArtifactDir = path.join(artifactRoot, "exports");
+  const logsDir = path.join(artifactRoot, "logs");
+  fs.mkdirSync(exportArtifactDir, { recursive: true });
+  fs.mkdirSync(logsDir, { recursive: true });
+  fs.writeFileSync(path.join(artifactRoot, "assertions.json"), "[]\n");
+  fs.writeFileSync(path.join(artifactRoot, "summary.md"), "# CanonKeeper Agent Test Summary\n\nRun started.\n");
+  fs.writeFileSync(path.join(logsDir, "run.log.txt"), "");
+  const assertions: AssertionResult[] = [];
+  const logLines: string[] = [];
+
+  const addAssertion = (assertion: AssertionResult) => {
+    assertions.push(assertion);
+    logLines.push(
+      `[${assertion.status.toUpperCase()}] ${assertion.id} expected="${assertion.expected}" actual="${assertion.actual}"`
+    );
+  };
 
   const worker = new RpcWorkerHarness();
   try {
@@ -165,19 +188,56 @@ async function run(): Promise<void> {
     const exportOut = path.join(tempRoot, "export");
 
     await worker.request("project.createOrOpen", { rootPath: tempRoot, name: "Journey Fixture" });
+    addAssertion({
+      id: "project-open",
+      status: "pass",
+      expected: "project.createOrOpen succeeds",
+      actual: "project opened",
+      evidence: tempRoot
+    });
+
     await worker.request<IngestResult>("project.addDocument", { path: simplePath });
     await worker.request<IngestResult>("project.addDocument", { path: contradictionPath });
+    addAssertion({
+      id: "ingest-documents",
+      status: "pass",
+      expected: "two fixture documents are ingested",
+      actual: "ingest completed for simple_md.md and contradiction.md",
+      evidence: `${simplePath}, ${contradictionPath}`
+    });
+
     await waitForStages(worker, ["scenes", "style", "extraction", "continuity"]);
+    addAssertion({
+      id: "stages-complete",
+      status: "pass",
+      expected: "scenes/style/extraction/continuity reach ok",
+      actual: "all required stages reached ok",
+      evidence: "project.getProcessingState"
+    });
 
     const scenes = await worker.request<SceneSummary[]>("scenes.list");
     if (scenes[0]) {
       await worker.request("scenes.get", { sceneId: scenes[0].id });
     }
+    addAssertion({
+      id: "scenes-available",
+      status: scenes.length > 0 ? "pass" : "fail",
+      expected: "at least one scene exists",
+      actual: `${scenes.length} scenes returned`,
+      evidence: "scenes.list"
+    });
 
     const issues = await worker.request<IssueSummary[]>("issues.list");
     if (issues[0]) {
       await worker.request("issues.resolve", { issueId: issues[0].id });
     }
+    addAssertion({
+      id: "issues-available",
+      status: issues.length > 0 ? "pass" : "fail",
+      expected: "at least one issue exists for contradiction fixture",
+      actual: `${issues.length} issues returned`,
+      evidence: "issues.list"
+    });
 
     const entities = await worker.request<Array<{ id: string }>>("bible.listEntities");
     if (entities[0]) {
@@ -190,33 +250,104 @@ async function run(): Promise<void> {
           valueJson: claim.claim.value_json,
           sourceClaimId: claim.claim.id
         });
+        addAssertion({
+          id: "confirm-claim",
+          status: "pass",
+          expected: "confirm claim succeeds with evidence-backed source",
+          actual: `confirmed claim ${claim.claim.id}`,
+          evidence: detail.entity.id
+        });
+      } else {
+        addAssertion({
+          id: "confirm-claim",
+          status: "skipped",
+          expected: "confirm claim succeeds with evidence-backed source",
+          actual: "no inferred claim with evidence available",
+          evidence: "bible.getEntity"
+        });
       }
     }
+    addAssertion({
+      id: "entities-available",
+      status: entities.length > 0 ? "pass" : "fail",
+      expected: "at least one entity exists",
+      actual: `${entities.length} entities returned`,
+      evidence: "bible.listEntities"
+    });
 
     await worker.request("style.getReport");
-    await worker.request("search.ask", { question: "What color are Mira's eyes?" });
-    await worker.request("export.run", { outDir: exportOut, kind: "all" });
+    addAssertion({
+      id: "style-report",
+      status: "pass",
+      expected: "style.getReport succeeds",
+      actual: "style report loaded",
+      evidence: "style.getReport"
+    });
+
+    const askResult = await worker.request<{ kind: string }>("search.ask", {
+      question: "What color are Mira's eyes?"
+    });
+    addAssertion({
+      id: "ask-result",
+      status: ["answer", "snippets", "not_found"].includes(askResult.kind) ? "pass" : "fail",
+      expected: "ask returns answer/snippets/not_found",
+      actual: askResult.kind,
+      evidence: "search.ask"
+    });
+
+    const exportResult = await worker.request<{ ok: boolean; files?: string[] }>("export.run", {
+      outDir: exportOut,
+      kind: "all"
+    });
+    addAssertion({
+      id: "export-run",
+      status: exportResult.ok ? "pass" : "fail",
+      expected: "export.run succeeds",
+      actual: exportResult.ok ? "ok" : "failed",
+      evidence: exportOut
+    });
 
     const history = await worker.request<ProjectHistory>("project.getHistory");
-    fs.writeFileSync(path.join(artifactRoot, "project-history.json"), JSON.stringify(history, null, 2));
+    fs.writeFileSync(path.join(logsDir, "project-history.json"), JSON.stringify(history, null, 2));
+    fs.writeFileSync(path.join(logsDir, "run.log.txt"), `${logLines.join("\n")}\n`);
 
-    const exportedArtifactDir = path.join(artifactRoot, "export");
-    fs.mkdirSync(exportedArtifactDir, { recursive: true });
     for (const fileName of ["bible.md", "scenes.md", "style_report.md", "project.json"]) {
       const sourcePath = path.join(exportOut, fileName);
       if (fs.existsSync(sourcePath)) {
-        fs.copyFileSync(sourcePath, path.join(exportedArtifactDir, fileName));
+        fs.copyFileSync(sourcePath, path.join(exportArtifactDir, fileName));
       }
     }
 
+    fs.writeFileSync(path.join(artifactRoot, "assertions.json"), `${JSON.stringify(assertions, null, 2)}\n`);
+
+    const passed = assertions.filter((row) => row.status === "pass").length;
+    const failed = assertions.filter((row) => row.status === "fail").length;
+    const skipped = assertions.filter((row) => row.status === "skipped").length;
     const summary = {
       artifactRoot,
       tempRoot,
       scenes: scenes.length,
       issues: issues.length,
-      exportedFiles: fs.readdirSync(exportedArtifactDir).sort()
+      assertions: { passed, failed, skipped },
+      exportedFiles: fs.readdirSync(exportArtifactDir).sort()
     };
     fs.writeFileSync(path.join(artifactRoot, "journey-summary.json"), JSON.stringify(summary, null, 2));
+    const topFailures = assertions.filter((row) => row.status === "fail").map((row) => `- ${row.id}: ${row.actual}`);
+
+    fs.writeFileSync(
+      path.join(artifactRoot, "summary.md"),
+      [
+        "# CanonKeeper Agent Test Summary",
+        "",
+        `- Run ID: \`${runId}\``,
+        `- Temp Project Root: \`${tempRoot}\``,
+        `- Assertions: pass=${passed}, fail=${failed}, skipped=${skipped}`,
+        `- Exports: ${summary.exportedFiles.join(", ") || "none"}`,
+        "",
+        "## Top Failures",
+        ...(topFailures.length > 0 ? topFailures : ["- none"])
+      ].join("\n")
+    );
     console.log(JSON.stringify(summary, null, 2));
   } finally {
     await worker.close();
@@ -224,7 +355,9 @@ async function run(): Promise<void> {
   }
 }
 
-void run().catch((error) => {
+try {
+  await run();
+} catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
-});
+}
